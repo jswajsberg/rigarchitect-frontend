@@ -1,70 +1,84 @@
-# React + TypeScript + Vite
+# RigArchitect Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + Vite frontend for creating and managing custom PC builds, featuring user authentication, real-time API integration, and a responsive Material UI interface.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+* Connects to the RigArchitect Spring Boot backend API
+* Axios and Orval-generated API clients for all endpoints
+* React Query for async data fetching and caching
+* Material UI components for a modern, responsive UI
+* Environment-based API URL configuration
 
-## Expanding the ESLint configuration
+## Getting Started
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Prerequisites
 
-```js
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+* Node.js 18+
+* npm 9+
 
-      // Remove tseslint.configs.recommended and replace with this
-      ...tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      ...tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      ...tseslint.configs.stylisticTypeChecked,
+### Installation
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+1. Clone the repository:
+
+   ```bash
+   git clone <your-repo-url>
+   cd rigarchitect-frontend
+   ```
+
+2. Install dependencies:
+
+   ```bash
+   npm install
+   ```
+
+3. (Optional) If using TypeScript, make sure types are installed:
+
+   ```bash
+   npm install @types/react @types/react-dom --save-dev
+   ```
+
+### Running the Development Server
+
+```bash
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Open your browser at [http://localhost:5173](http://localhost:5173) to view the app.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### API Client Generation (Optional)
 
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+If using Orval to generate API clients from your OpenAPI spec:
+
+1. Configure `orval.config.js` with the location of your OpenAPI spec.
+2. Run:
+
+   ```bash
+   npm run generate:api
+   ```
+3. Generated API files will appear in `src/api/generated/`.
+
+### Environment Variables
+
+Create a `.env` file in the project root for backend configuration:
+
 ```
-# rigarchitect-frontend
+VITE_API_BASE_URL=http://localhost:8080
+```
+
+Use it in code:
+
+```javascript
+axios.defaults.baseURL = import.meta.env.VITE_API_BASE_URL;
+```
+
+### Dependencies
+
+* React + Vite
+* Material UI (`@mui/material`, `@emotion/react`, `@emotion/styled`)
+* Axios & React Query (`@tanstack/react-query`, `@tanstack/react-query-devtools`)
+* Orval (optional, dev dependency)
+
+### License
+
+[MIT](LICENSE)
