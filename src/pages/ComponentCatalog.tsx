@@ -1,9 +1,24 @@
-import { useGetAllComponents } from "../api/component-controller/component-controller";
+import { useState } from "react";
+import {
+  useGetAllComponents,
+  useGetComponentsByType,
+} from "../api/component-controller/component-controller";
 import type { ComponentResponse } from "../api/model";
 
 const ComponentCatalog = () => {
+  const [selectedType, setSelectedType] = useState<string | null>(null);
+
   // Fetch all components to calculate counts by type
   const { data: components, isLoading, error, refetch } = useGetAllComponents();
+
+  // Fetch components of selected type
+  const {
+    data: typeComponents,
+    isLoading: isTypeLoading,
+    error: typeError,
+  } = useGetComponentsByType(selectedType as any, {
+    query: { enabled: !!selectedType },
+  });
 
   const componentTypes = [
     { id: "CPU", name: "CPU", description: "Processors and chips" },
@@ -26,8 +41,7 @@ const ComponentCatalog = () => {
   };
 
   const handleBrowseType = (typeId: string) => {
-    console.log(`Browsing ${typeId} components`);
-    // Later you can navigate to a filtered view or set state to show filtered components
+    setSelectedType(selectedType === typeId ? null : typeId); // Toggle selection
   };
 
   if (isLoading) {
@@ -58,13 +72,15 @@ const ComponentCatalog = () => {
         <h2 className="text-2xl font-bold mb-4">Component Catalog</h2>
         <div className="bg-white p-6 rounded-lg shadow">
           <div className="text-red-600 mb-4">
-            Error loading components: {error.message}
+            {" "}
+            Error loading components: {error.message || "Unknown error"}{" "}
           </div>
           <button
             onClick={() => window.location.reload()}
             className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
           >
-            Retry
+            {" "}
+            Retry{" "}
           </button>
         </div>
       </div>
@@ -80,16 +96,18 @@ const ComponentCatalog = () => {
           disabled={isLoading}
           className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
         >
-          {isLoading ? "Refreshing..." : "Refresh"}
+          {" "}
+          {isLoading ? "Refreshing..." : "Refresh"}{" "}
         </button>
       </div>
+      {/* Component Type Cards */}
       <div className="bg-white p-6 rounded-lg shadow">
         <h3 className="text-lg font-semibold mb-3">Available Components</h3>
         <div className="text-gray-500 mb-4">
+          {" "}
           Browse and search from {components?.data?.length || 0} total
-          components
+          components{" "}
         </div>
-
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {componentTypes.map((type) => {
             const count = getComponentCount(type.id);
@@ -101,24 +119,67 @@ const ComponentCatalog = () => {
                 <div className="flex justify-between items-start mb-2">
                   <h4 className="font-medium">{type.name}</h4>
                   <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded">
-                    {count} items
+                    {" "}
+                    {count} items{" "}
                   </span>
                 </div>
                 <div className="text-sm text-gray-600 mb-3">
-                  {type.description}
+                  {" "}
+                  {type.description}{" "}
                 </div>
                 <button
                   onClick={() => handleBrowseType(type.id)}
                   className="text-blue-600 hover:text-blue-700 text-sm font-medium"
                   disabled={count === 0}
                 >
-                  {count === 0 ? "No items available" : `Browse ${type.name} →`}
+                  {" "}
+                  {count === 0
+                    ? "No items available"
+                    : selectedType === type.id
+                    ? `Hide ${type.name}`
+                    : `Browse ${type.name} →`}{" "}
                 </button>
               </div>
             );
           })}
         </div>
       </div>
+      {/* Detailed View */}
+      {selectedType && (
+        <div className="mt-6 bg-white p-6 rounded-lg shadow">
+          <h3 className="text-lg font-semibold mb-3">
+            {" "}
+            {selectedType} Components{" "}
+          </h3>
+          {isTypeLoading && (
+            <div className="text-gray-500">Loading {selectedType}...</div>
+          )}
+          {typeError && (
+            <div className="text-red-600">
+              {" "}
+              Error loading {selectedType} components{" "}
+            </div>
+          )}
+          {typeComponents?.data?.length ? (
+            <ul className="space-y-2">
+              {typeComponents.data.map((c: ComponentResponse) => (
+                <li key={c.id} className="p-3 border rounded">
+                  <div className="font-medium">{c.name}</div>
+                  <div className="text-sm text-gray-600">Type: {c.type}</div>
+                  <div className="text-xs text-gray-500">ID: {c.id}</div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            !isTypeLoading && (
+              <div className="text-gray-500">
+                {" "}
+                No components found for {selectedType}{" "}
+              </div>
+            )
+          )}
+        </div>
+      )}
     </div>
   );
 };
