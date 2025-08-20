@@ -1,11 +1,11 @@
-import { useState } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+import { useState } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
-import Navigation from './components/Navigation';
-import CartManagement from './pages/CartManagement.tsx';
-import ComponentCatalog from './pages/ComponentCatalog.tsx';
-import BuildRequests from './pages/BuildRequests.tsx';
+import Navigation from "./components/Navigation";
+import CartManagement from "./pages/CartManagement.tsx";
+import ComponentCatalog from "./pages/ComponentCatalog.tsx";
+import BuildRequests from "./pages/BuildRequests.tsx";
 
 // Create a client
 const queryClient = new QueryClient({
@@ -13,20 +13,21 @@ const queryClient = new QueryClient({
     queries: {
       staleTime: 1000 * 60 * 5, // 5 minutes
       retry: 1,
+      refetchOnWindowFocus: false, // Prevents refetching when user returns to tab
     },
   },
 });
 
 const App = () => {
-  const [activeTab, setActiveTab] = useState('cart');
+  const [activeTab, setActiveTab] = useState("cart");
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'cart':
+      case "cart":
         return <CartManagement />;
-      case 'components':
+      case "components":
         return <ComponentCatalog />;
-      case 'builds':
+      case "builds":
         return <BuildRequests />;
       default:
         return <CartManagement />;

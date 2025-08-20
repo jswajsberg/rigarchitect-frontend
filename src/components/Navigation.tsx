@@ -1,5 +1,3 @@
-import React from 'react';
-
 type NavigationProps = {
   activeTab: string;
   setActiveTab: (tabId: string) => void;
@@ -7,9 +5,9 @@ type NavigationProps = {
 
 const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
   const tabs = [
-    { id: 'cart', label: 'Cart Management', icon: '🛒' },
-    { id: 'components', label: 'Component Catalog', icon: '🔧' },
-    { id: 'builds', label: 'Build Requests', icon: '⚙️' },
+    { id: "cart", label: "Cart Management", icon: "🛒" },
+    { id: "components", label: "Component Catalog", icon: "🔧" },
+    { id: "builds", label: "Build Requests", icon: "⚙️" },
   ];
 
   return (
@@ -23,8 +21,8 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
               onClick={() => setActiveTab(tab.id)}
               className={`px-4 py-2 rounded-lg transition-colors ${
                 activeTab === tab.id
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-700 hover:bg-gray-600 text-gray-300"
               }`}
             >
               <span className="mr-2">{tab.icon}</span>
