@@ -1,14 +1,15 @@
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
+import type { ComponentResponse } from "../api/model";
+import SearchBar from "../components/SearchBar";
+import ComponentCard from "../components/ComponentCard";
+import type { SearchFilters } from "../components/SearchBar";
 import {
   useGetAllComponents,
   useGetComponentsByType,
-  useGetComponentsByCompatibilityTag,
+  // useGetComponentsByCompatibilityTag, // Comment out if this doesn't exist yet
 } from "../api/component-controller/component-controller";
-import type { ComponentResponse } from "../api/model";
-import SearchBar from "../components/SearchBar";
-import type { SearchFilters } from "../components/SearchBar";
 
-const ComponentCatalog = () => {
+const ComponentCatalog: React.FC = () => {
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
@@ -127,19 +128,17 @@ const ComponentCatalog = () => {
     }
   );
 
-  // Compatibility search (use dedicated endpoint)
-  const {
-    data: compatibilitySearchResults,
-    isLoading: isCompatibilitySearchLoading,
-    error: compatibilitySearchError,
-  } = useGetComponentsByCompatibilityTag(
-    searchStrategy?.strategy === "compatibility"
-      ? (searchStrategy.params as string)
-      : "",
-    {
-      query: { enabled: searchStrategy?.strategy === "compatibility" },
-    }
-  );
+  // Compatibility search (use dedicated endpoint) - Comment out if hook doesn't exist
+  // const {
+  //   data: compatibilitySearchResults,
+  //   isLoading: isCompatibilitySearchLoading,
+  //   error: compatibilitySearchError,
+  // } = useGetComponentsByCompatibilityTag(
+  //   searchStrategy?.strategy === "compatibility" ? (searchStrategy.params as string) : "",
+  //   {
+  //     query: { enabled: searchStrategy?.strategy === "compatibility" },
+  //   }
+  // );
 
   const getComponentCount = (type: string): number => {
     if (!components?.data || !Array.isArray(components.data)) return 0;
@@ -180,6 +179,18 @@ const ComponentCatalog = () => {
       setSelectedType(null);
       setShowAdvancedSearch(false);
     }
+  };
+
+  const handleAddToBuildCart = (component: ComponentResponse) => {
+    // TODO: Implement build cart functionality
+    console.log("Adding to build cart:", component.name);
+    // You can show a toast notification here
+  };
+
+  const handleAddToCheckoutCart = (component: ComponentResponse) => {
+    // TODO: Implement checkout cart functionality
+    console.log("Adding to checkout cart:", component.name);
+    // You can show a toast notification here
   };
 
   const clearAllFilters = () => {
@@ -316,11 +327,48 @@ const ComponentCatalog = () => {
           break;
 
         case "compatibility":
-          results = compatibilitySearchResults?.data || [];
+          // Temporarily fall back to client-side filtering until hook is available
+          results =
+            components?.data?.filter((c: ComponentResponse) => {
+              const searchTerm = (searchStrategy.params || "").toLowerCase();
+
+              // Search in main compatibilityTag field
+              const tagMatch = c.compatibilityTag
+                ?.toLowerCase()
+                .includes(searchTerm);
+
+              // Also search in legacy socket field for backward compatibility
+              const socketMatch = c.socket?.toLowerCase().includes(searchTerm);
+
+              // Search in ramType field for RAM-related searches
+              const ramMatch = c.ramType?.toLowerCase().includes(searchTerm);
+
+              // Search in formFactor field for form factor searches
+              const formFactorMatch = c.formFactor
+                ?.toLowerCase()
+                .includes(searchTerm);
+
+              // Search in psuFormFactor field for PSU form factor searches
+              const psuFormFactorMatch = c.psuFormFactor
+                ?.toLowerCase()
+                .includes(searchTerm);
+
+              return (
+                tagMatch ||
+                socketMatch ||
+                ramMatch ||
+                formFactorMatch ||
+                psuFormFactorMatch
+              );
+            }) || [];
           break;
 
         case "type":
           results = typeSearchResults?.data || [];
+          break;
+
+        default:
+          results = [];
           break;
       }
     } else if (selectedType) {
@@ -361,7 +409,7 @@ const ComponentCatalog = () => {
         case "advanced":
         case "general":
         case "compatibility":
-          return isCompatibilitySearchLoading;
+          return isLoading; // Fall back to loading all components for client-side filtering
         case "type":
           return isTypeSearchLoading;
         default:
@@ -388,7 +436,7 @@ const ComponentCatalog = () => {
         case "advanced":
         case "general":
         case "compatibility":
-          return compatibilitySearchError;
+          return error; // Fall back to error from loading all components
         case "type":
           return typeSearchError;
         default:
@@ -566,57 +614,22 @@ const ComponentCatalog = () => {
           {!isSearchLoading && (
             <>
               {displayedComponents.length > 0 ? (
-                <div className="space-y-2">
-                  <div className="text-sm text-gray-500 mb-3">
+                <div className="space-y-4">
+                  <div className="text-sm text-gray-500 mb-4">
                     {displayedComponents.length} component
                     {displayedComponents.length === 1 ? "" : "s"} found
                   </div>
-                  <ul className="space-y-2">
-                    {displayedComponents.map((c: ComponentResponse) => (
-                      <li
-                        key={c.id}
-                        className="p-3 border rounded hover:bg-gray-50"
-                      >
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <div className="font-medium">
-                              {c.name ?? "Unnamed Component"}
-                            </div>
-                            <div className="text-sm text-gray-600">
-                              Type: {c.type}
-                              {c.brand && ` • Brand: ${c.brand}`}
-                              {c.compatibilityTag &&
-                                ` • Compatibility: ${c.compatibilityTag}`}
-                              {c.socket && ` • Socket: ${c.socket}`}
-                              {c.ramType && ` • RAM: ${c.ramType}`}
-                              {c.formFactor && ` • Form: ${c.formFactor}`}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              ID: {c.id}
-                            </div>
-                          </div>
-                          <div className="text-right text-sm">
-                            {c.price && (
-                              <div className="font-medium">${c.price}</div>
-                            )}
-                            {c.stockQuantity !== undefined && (
-                              <div
-                                className={`text-xs ${
-                                  c.stockQuantity > 0
-                                    ? "text-green-600"
-                                    : "text-red-600"
-                                }`}
-                              >
-                                {c.stockQuantity > 0
-                                  ? `${c.stockQuantity} in stock`
-                                  : "Out of stock"}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </li>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {displayedComponents.map((component: ComponentResponse) => (
+                      <ComponentCard
+                        key={component.id}
+                        component={component}
+                        onAddToBuildCart={handleAddToBuildCart}
+                        onAddToCheckoutCart={handleAddToCheckoutCart}
+                        showCartButtons={true}
+                      />
                     ))}
-                  </ul>
+                  </div>
                 </div>
               ) : (
                 <div className="text-gray-500">
