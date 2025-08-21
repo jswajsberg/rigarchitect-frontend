@@ -1,7 +1,7 @@
 export interface SearchFilters {
   type: string;
   brand: string;
-  socket: string;
+  compatibilityTag: string;
   maxPrice: string;
   minStock: string;
 }
@@ -38,7 +38,7 @@ const SearchBar = ({
         <div className="flex gap-2">
           <input
             type="text"
-            placeholder="Search by name, brand, socket (e.g., LGA1700), or component type..."
+            placeholder="Search by name, brand, compatibility (e.g., AM4, DDR4, ATX), or component type..."
             value={searchTerm}
             onChange={(e) => onSearchTermChange(e.target.value)}
             className="flex-1 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -70,8 +70,8 @@ const SearchBar = ({
         </div>
         {!showAdvancedSearch && (
           <div className="text-xs text-gray-500 mt-1">
-            Smart search: detects component types, sockets (LGA1700, AM5, etc.),
-            RAM terms (DDR), or searches across all fields
+            Smart search: detects component types, compatibility tags (AM4,
+            DDR4, ATX, etc.), RAM terms (DDR), or searches across all fields
             {inStockOnly && " • Showing only items in stock"}
           </div>
         )}
@@ -110,12 +110,16 @@ const SearchBar = ({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Socket</label>
+              <label className="block text-sm font-medium mb-1">
+                Compatibility Tag
+              </label>
               <input
                 type="text"
-                placeholder="e.g., LGA1700, AM5"
-                value={filters.socket}
-                onChange={(e) => onFilterChange("socket", e.target.value)}
+                placeholder="e.g., AM4, DDR4, ATX, PCIe4.0"
+                value={filters.compatibilityTag}
+                onChange={(e) =>
+                  onFilterChange("compatibilityTag", e.target.value)
+                }
                 className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                 disabled={disabled}
               />

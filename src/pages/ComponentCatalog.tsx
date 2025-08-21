@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import {
   useGetAllComponents,
   useGetComponentsByType,
+  useGetComponentsByCompatibilityTag,
 } from "../api/component-controller/component-controller";
 import type { ComponentResponse } from "../api/model";
 import SearchBar from "../components/SearchBar";
@@ -16,7 +17,7 @@ const ComponentCatalog = () => {
   const [filters, setFilters] = useState<SearchFilters>({
     type: "",
     brand: "",
-    socket: "",
+    compatibilityTag: "",
     maxPrice: "",
     minStock: "0",
   });
@@ -54,7 +55,7 @@ const ComponentCatalog = () => {
       const hasFilters =
         filters.type ||
         filters.brand ||
-        filters.socket ||
+        filters.compatibilityTag ||
         filters.maxPrice ||
         filters.minStock !== "0";
       return hasFilters
@@ -63,7 +64,7 @@ const ComponentCatalog = () => {
             params: {
               type: filters.type,
               brand: filters.brand,
-              socket: filters.socket,
+              compatibilityTag: filters.compatibilityTag,
               maxPrice: filters.maxPrice,
               minStock: filters.minStock,
             },
@@ -87,16 +88,21 @@ const ComponentCatalog = () => {
       return { strategy: "type" as const, params: matchingType.id };
     }
 
-    // Check if it looks like a socket (common patterns) - be more specific
-    const socketPatterns = /^(LGA\d+|AM[45]|FM\d+|TR\d+|Socket\s+\w+)$/i;
-    if (socketPatterns.test(searchTerm)) {
-      return { strategy: "socket" as const, params: searchTerm };
+    // Check if it looks like a compatibility tag (common patterns)
+    const compatibilityPatterns =
+      /^(AM[45]|LGA\d+|DDR[3456]|ATX|mATX|ITX|PCIe[0-9.]+|SATA[36]|M\.2|NVMe|Socket\s+\w+|FM\d+|TR\d+)$/i;
+    if (compatibilityPatterns.test(searchTerm)) {
+      return { strategy: "compatibility" as const, params: searchTerm };
     }
 
-    // Check for partial socket matches only if it's clearly a socket pattern
-    const partialSocketPatterns = /^(LGA|AM[45]|FM\d|TR\d)/i;
-    if (partialSocketPatterns.test(searchTerm) && searchTerm.length >= 3) {
-      return { strategy: "socket" as const, params: searchTerm };
+    // Check for partial compatibility matches with common patterns
+    const partialCompatibilityPatterns =
+      /^(AM[45]|LGA|DDR\d|ATX|PCIe|SATA|FM\d|TR\d)/i;
+    if (
+      partialCompatibilityPatterns.test(searchTerm) &&
+      searchTerm.length >= 3
+    ) {
+      return { strategy: "compatibility" as const, params: searchTerm };
     }
 
     // Check for RAM-related terms (DDR, memory, etc.)
@@ -105,7 +111,7 @@ const ComponentCatalog = () => {
       return { strategy: "type" as const, params: "RAM" };
     }
 
-    // Default to general search - search in name, brand, and socket fields
+    // Default to general search - search in name, brand, and compatibility fields
     return { strategy: "general" as const, params: searchTerm };
   }, [searchTerm, showAdvancedSearch, filters, componentTypes]);
 
@@ -118,6 +124,20 @@ const ComponentCatalog = () => {
     searchStrategy?.strategy === "type" ? (searchStrategy.params as any) : null,
     {
       query: { enabled: searchStrategy?.strategy === "type" },
+    }
+  );
+
+  // Compatibility search (use dedicated endpoint)
+  const {
+    data: compatibilitySearchResults,
+    isLoading: isCompatibilitySearchLoading,
+    error: compatibilitySearchError,
+  } = useGetComponentsByCompatibilityTag(
+    searchStrategy?.strategy === "compatibility"
+      ? (searchStrategy.params as string)
+      : "",
+    {
+      query: { enabled: searchStrategy?.strategy === "compatibility" },
     }
   );
 
@@ -166,7 +186,7 @@ const ComponentCatalog = () => {
     setFilters({
       type: "",
       brand: "",
-      socket: "",
+      compatibilityTag: "",
       maxPrice: "",
       minStock: "0",
     });
@@ -203,13 +223,41 @@ const ComponentCatalog = () => {
             );
           }
 
-          // Apply socket filter
-          if (searchStrategy.params.socket) {
-            results = results.filter((c: ComponentResponse) =>
-              c.socket
+          // Apply compatibility tag filter
+          if (searchStrategy.params.compatibilityTag) {
+            results = results.filter((c: ComponentResponse) => {
+              const searchTag =
+                searchStrategy.params.compatibilityTag.toLowerCase();
+
+              // Search in main compatibilityTag field
+              const tagMatch = c.compatibilityTag
                 ?.toLowerCase()
-                .includes(searchStrategy.params.socket.toLowerCase())
-            );
+                .includes(searchTag);
+
+              // Also search in legacy socket field for backward compatibility
+              const socketMatch = c.socket?.toLowerCase().includes(searchTag);
+
+              // Search in ramType field for RAM-related searches
+              const ramMatch = c.ramType?.toLowerCase().includes(searchTag);
+
+              // Search in formFactor field for form factor searches
+              const formFactorMatch = c.formFactor
+                ?.toLowerCase()
+                .includes(searchTag);
+
+              // Search in psuFormFactor field for PSU form factor searches
+              const psuFormFactorMatch = c.psuFormFactor
+                ?.toLowerCase()
+                .includes(searchTag);
+
+              return (
+                tagMatch ||
+                socketMatch ||
+                ramMatch ||
+                formFactorMatch ||
+                psuFormFactorMatch
+              );
+            });
           }
 
           // Apply max price filter
@@ -235,7 +283,7 @@ const ComponentCatalog = () => {
           break;
 
         case "general":
-          // Search across multiple fields: name, brand, socket
+          // Search across multiple fields: name, brand, compatibilityTag, socket (legacy), ramType, formFactor
           results =
             components?.data?.filter((c: ComponentResponse) => {
               const searchLower = (
@@ -243,18 +291,32 @@ const ComponentCatalog = () => {
               ).toLowerCase();
               const nameMatch = c.name?.toLowerCase().includes(searchLower);
               const brandMatch = c.brand?.toLowerCase().includes(searchLower);
+              const compatibilityMatch = c.compatibilityTag
+                ?.toLowerCase()
+                .includes(searchLower);
               const socketMatch = c.socket?.toLowerCase().includes(searchLower);
-              return nameMatch || brandMatch || socketMatch;
+              const ramMatch = c.ramType?.toLowerCase().includes(searchLower);
+              const formFactorMatch = c.formFactor
+                ?.toLowerCase()
+                .includes(searchLower);
+              const psuFormFactorMatch = c.psuFormFactor
+                ?.toLowerCase()
+                .includes(searchLower);
+
+              return (
+                nameMatch ||
+                brandMatch ||
+                compatibilityMatch ||
+                socketMatch ||
+                ramMatch ||
+                formFactorMatch ||
+                psuFormFactorMatch
+              );
             }) || [];
           break;
 
-        case "socket":
-          results =
-            components?.data?.filter((c: ComponentResponse) => {
-              const socket = c.socket || "";
-              const searchTerm = searchStrategy.params || "";
-              return socket.toLowerCase().includes(searchTerm.toLowerCase());
-            }) || [];
+        case "compatibility":
+          results = compatibilitySearchResults?.data || [];
           break;
 
         case "type":
@@ -298,8 +360,8 @@ const ComponentCatalog = () => {
       switch (searchStrategy.strategy) {
         case "advanced":
         case "general":
-        case "socket":
-          return isLoading; // Loading all components for client-side filtering
+        case "compatibility":
+          return isCompatibilitySearchLoading;
         case "type":
           return isTypeSearchLoading;
         default:
@@ -325,8 +387,8 @@ const ComponentCatalog = () => {
       switch (searchStrategy.strategy) {
         case "advanced":
         case "general":
-        case "socket":
-          return error; // Error from loading all components
+        case "compatibility":
+          return compatibilitySearchError;
         case "type":
           return typeSearchError;
         default:
@@ -472,8 +534,8 @@ const ComponentCatalog = () => {
               Using {searchStrategy.strategy} search
               {searchStrategy.strategy === "type" &&
                 " (detected component type)"}
-              {searchStrategy.strategy === "socket" &&
-                " (detected socket pattern)"}
+              {searchStrategy.strategy === "compatibility" &&
+                " (detected compatibility pattern)"}
               {searchStrategy.strategy === "general" &&
                 " (searching all fields)"}
               {searchStrategy.strategy === "advanced" &&
@@ -523,7 +585,11 @@ const ComponentCatalog = () => {
                             <div className="text-sm text-gray-600">
                               Type: {c.type}
                               {c.brand && ` • Brand: ${c.brand}`}
+                              {c.compatibilityTag &&
+                                ` • Compatibility: ${c.compatibilityTag}`}
                               {c.socket && ` • Socket: ${c.socket}`}
+                              {c.ramType && ` • RAM: ${c.ramType}`}
+                              {c.formFactor && ` • Form: ${c.formFactor}`}
                             </div>
                             <div className="text-xs text-gray-500">
                               ID: {c.id}
