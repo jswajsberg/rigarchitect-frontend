@@ -2,18 +2,20 @@ import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
+import { UserProvider } from "./contexts/UserContext";
+import { CartProvider } from "./contexts/CartContext";
 import Navigation from "./components/Navigation";
 import CartManagement from "./pages/CartManagement.tsx";
 import ComponentCatalog from "./pages/ComponentCatalog.tsx";
 import BuildRequests from "./pages/BuildRequests.tsx";
-import { CartProvider } from "./contexts/CartContext";
 
+// Create a client
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5,
+      staleTime: 1000 * 60 * 5, // 5 minutes
       retry: 1,
-      refetchOnWindowFocus: false,
+      refetchOnWindowFocus: false, // Prevents refetching when user returns to tab
     },
   },
 });
@@ -36,16 +38,15 @@ const App = () => {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <CartProvider>
-        {" "}
-        {/* ADD THIS */}
-        <div className="min-h-screen bg-gray-100">
-          <Navigation activeTab={activeTab} setActiveTab={setActiveTab} />
-          <main className="max-w-7xl mx-auto">{renderContent()}</main>
-        </div>
-        <ReactQueryDevtools initialIsOpen={false} />
-      </CartProvider>{" "}
-      {/* ADD THIS */}
+      <UserProvider>
+        <CartProvider>
+          <div className="min-h-screen bg-gray-100">
+            <Navigation activeTab={activeTab} setActiveTab={setActiveTab} />
+            <main className="max-w-7xl mx-auto">{renderContent()}</main>
+          </div>
+          <ReactQueryDevtools initialIsOpen={false} />
+        </CartProvider>
+      </UserProvider>
     </QueryClientProvider>
   );
 };

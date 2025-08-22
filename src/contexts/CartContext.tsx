@@ -1,4 +1,4 @@
-// src/contexts/CartContext.tsx - WITH CART ITEMS SUPPORT
+// src/contexts/CartContext.tsx - Updated to use selected user
 import React, { createContext, useContext, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -6,13 +6,12 @@ import {
   useCreateCartForUser,
 } from "../api/build-cart-controller/build-cart-controller";
 import { useCreateItem } from "../api/cart-item-controller/cart-item-controller";
+import { useSelectedUserId } from "./UserContext";
 import type {
   ComponentResponse,
   BuildCartResponse,
   CartItemRequest,
 } from "../api/model";
-
-const CURRENT_USER_ID = 1;
 
 interface CartContextType {
   currentCart: BuildCartResponse | null;
@@ -20,7 +19,7 @@ interface CartContextType {
   selectedCartId: number | null;
   addToCart: (component: ComponentResponse, quantity?: number) => Promise<void>;
   showToast: (message: string, type: "success" | "error" | "info") => void;
-  selectCart: (cartId: number) => void; // Add this method
+  selectCart: (cartId: number) => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -43,24 +42,28 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const queryClient = useQueryClient();
+  const selectedUserId = useSelectedUserId(); // Use selected user from UserContext
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [selectedCartId, setSelectedCartId] = useState<number | null>(null);
 
+  // Only fetch carts if we have a selected user
   const {
     data: userCarts,
     isLoading,
     error,
-  } = useGetUserCarts(CURRENT_USER_ID);
+  } = useGetUserCarts(selectedUserId || 0, {
+    query: { enabled: !!selectedUserId },
+  });
+
   const createCartMutation = useCreateCartForUser();
   const createItemMutation = useCreateItem();
 
   // Debug logging
   console.log("🛒 CartProvider Debug:", {
+    selectedUserId,
     userCarts: userCarts?.data,
     isLoading,
     error: error?.message,
-    createCartMutation: createCartMutation.status,
-    createItemMutation: createItemMutation.status,
   });
 
   const activeCarts =
@@ -71,6 +74,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
     null;
 
   console.log("🛒 Cart State:", {
+    selectedUserId,
     activeCarts: activeCarts.length,
     selectedCartId,
     currentCart: currentCart?.id,
@@ -95,7 +99,14 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
     component: ComponentResponse,
     quantity: number = 1
   ) => {
+    // Check if we have a selected user
+    if (!selectedUserId) {
+      showToast("Please select a user first", "error");
+      return;
+    }
+
     console.log("🛒 AddToCart called:", {
+      selectedUserId,
       componentId: component.id,
       componentName: component.name,
       quantity,
@@ -108,20 +119,17 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
       if (!targetCart) {
         console.log("🛒 No cart exists, creating new one...");
         const newCartResponse = await createCartMutation.mutateAsync({
-          userId: CURRENT_USER_ID,
+          userId: selectedUserId,
           data: { name: "My Build Cart", status: "ACTIVE" },
         });
         targetCart = newCartResponse.data;
-        setSelectedCartId(targetCart.id!); // Auto-select the new cart
-        console.log("🛒 Created new cart:", targetCart);
-        showToast("Created new cart automatically", "info");
-      }
+        setSelectedCartId(targetCart.id!);
 
-      console.log("🛒 Adding item to cart:", {
-        cartId: targetCart.id,
-        componentId: component.id,
-        quantity,
-      });
+        // Invalidate carts query to refetch
+        queryClient.invalidateQueries({
+          queryKey: [`/api/v1/carts/user/${selectedUserId}`],
+        });
+      }
 
       const cartItemRequest: CartItemRequest = {
         cartId: targetCart.id!,
@@ -129,71 +137,53 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
         quantity,
       };
 
-      const result = await createItemMutation.mutateAsync({
-        data: cartItemRequest,
-      });
-      console.log("🛒 Item added successfully:", result);
+      console.log("🛒 Creating cart item:", cartItemRequest);
+      await createItemMutation.mutateAsync({ data: cartItemRequest });
 
-      // Refresh both cart data and cart items
+      // Invalidate relevant queries
       queryClient.invalidateQueries({
-        queryKey: [`/api/v1/carts/user/${CURRENT_USER_ID}`],
+        queryKey: [`/api/v1/carts/user/${selectedUserId}`],
       });
       queryClient.invalidateQueries({
         queryKey: [`/api/v1/items/cart/${targetCart.id}`],
       });
 
-      // Force refresh cart data after a brief delay to ensure backend has updated
-      setTimeout(() => {
-        queryClient.invalidateQueries({
-          queryKey: [`/api/v1/carts/user/${CURRENT_USER_ID}`],
-        });
-      }, 500);
-
-      showToast(`Added ${component.name} to cart!`, "success");
+      showToast(
+        `Added ${component.name} to cart (Qty: ${quantity})`,
+        "success"
+      );
     } catch (error: any) {
-      console.error("🛒 Failed to add to cart:", error);
-      console.error("🛒 Error details:", {
-        status: error.response?.status,
-        data: error.response?.data,
-        message: error.message,
-      });
-
-      // Handle duplicate item - show friendly message
-      if (
-        error.response?.status === 500 &&
-        error.message.includes("duplicate key")
-      ) {
-        showToast(`${component.name} is already in your cart!`, "info");
-      } else {
-        showToast(
-          `Failed to add item to cart: ${
-            error.response?.data?.message || error.message
-          }`,
-          "error"
-        );
-      }
+      console.error("🛒 AddToCart error:", error);
+      const errorMsg =
+        error.response?.data?.message || error.message || "Unknown error";
+      showToast(`Failed to add to cart: ${errorMsg}`, "error");
     }
   };
 
+  // Reset selected cart when user changes
+  React.useEffect(() => {
+    setSelectedCartId(null);
+  }, [selectedUserId]);
+
+  const contextValue: CartContextType = {
+    currentCart,
+    activeCarts,
+    selectedCartId,
+    addToCart,
+    showToast,
+    selectCart,
+  };
+
   return (
-    <CartContext.Provider
-      value={{
-        currentCart,
-        activeCarts,
-        selectedCartId,
-        addToCart,
-        showToast,
-        selectCart,
-      }}
-    >
+    <CartContext.Provider value={contextValue}>
       {children}
 
-      {/* Toast Notifications */}
-      <div className="fixed top-4 right-4 z-50 space-y-2">
+      {/* Toast notifications */}
+      <div className="fixed top-4 right-4 space-y-2 z-50">
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className={`px-4 py-3 rounded-lg shadow-lg text-white max-w-sm transform transition-all duration-300 ${
+            className={`px-4 py-2 rounded-lg text-white shadow-lg transition-opacity ${
               toast.type === "success"
                 ? "bg-green-600"
                 : toast.type === "error"
