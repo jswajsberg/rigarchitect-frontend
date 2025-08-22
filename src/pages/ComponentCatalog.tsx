@@ -2,17 +2,30 @@ import React, { useState, useMemo } from "react";
 import type { ComponentResponse } from "../api/model";
 import SearchBar from "../components/SearchBar";
 import ComponentCard from "../components/ComponentCard";
+import QuantityModal from "../modals/QuantityModal";
 import type { SearchFilters } from "../components/SearchBar";
+import { useCart } from "../contexts/CartContext";
 import {
   useGetAllComponents,
   useGetComponentsByType,
-  // useGetComponentsByCompatibilityTag, // Comment out if this doesn't exist yet
 } from "../api/component-controller/component-controller";
 
 const ComponentCatalog: React.FC = () => {
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
+  const { addToCart, showToast, currentCart } = useCart();
+
+  // Modal state for quantity selection
+  const [quantityModal, setQuantityModal] = useState<{
+    isOpen: boolean;
+    component: ComponentResponse | null;
+    actionType: "build" | "buy";
+  }>({
+    isOpen: false,
+    component: null,
+    actionType: "build",
+  });
 
   // Advanced search filters
   const [filters, setFilters] = useState<SearchFilters>({
@@ -128,18 +141,6 @@ const ComponentCatalog: React.FC = () => {
     }
   );
 
-  // Compatibility search (use dedicated endpoint) - Comment out if hook doesn't exist
-  // const {
-  //   data: compatibilitySearchResults,
-  //   isLoading: isCompatibilitySearchLoading,
-  //   error: compatibilitySearchError,
-  // } = useGetComponentsByCompatibilityTag(
-  //   searchStrategy?.strategy === "compatibility" ? (searchStrategy.params as string) : "",
-  //   {
-  //     query: { enabled: searchStrategy?.strategy === "compatibility" },
-  //   }
-  // );
-
   const getComponentCount = (type: string): number => {
     if (!components?.data || !Array.isArray(components.data)) return 0;
     return components.data.filter((c: ComponentResponse) => c.type === type)
@@ -181,16 +182,54 @@ const ComponentCatalog: React.FC = () => {
     }
   };
 
-  const handleAddToBuildCart = (component: ComponentResponse) => {
-    // TODO: Implement build cart functionality
-    console.log("Adding to build cart:", component.name);
-    // You can show a toast notification here
+  // Updated cart handlers with modal
+  const handleAddToBuildCart = async (component: ComponentResponse) => {
+    if (!currentCart) {
+      showToast("Please select a cart in Cart Management first!", "error");
+      return;
+    }
+
+    setQuantityModal({
+      isOpen: true,
+      component,
+      actionType: "build",
+    });
   };
 
-  const handleAddToCheckoutCart = (component: ComponentResponse) => {
-    // TODO: Implement checkout cart functionality
-    console.log("Adding to checkout cart:", component.name);
-    // You can show a toast notification here
+  const handleAddToCheckoutCart = async (component: ComponentResponse) => {
+    if (!currentCart) {
+      showToast("Please select a cart in Cart Management first!", "error");
+      return;
+    }
+
+    setQuantityModal({
+      isOpen: true,
+      component,
+      actionType: "buy",
+    });
+  };
+
+  // Handle quantity confirmation from modal
+  const handleQuantityConfirm = async (quantity: number) => {
+    if (!quantityModal.component) return;
+
+    await addToCart(quantityModal.component, quantity);
+
+    if (quantityModal.actionType === "buy") {
+      showToast(
+        `${quantityModal.component.name} added! Go to Cart tab to checkout.`,
+        "info"
+      );
+    }
+  };
+
+  // Close modal
+  const closeModal = () => {
+    setQuantityModal({
+      isOpen: false,
+      component: null,
+      actionType: "build",
+    });
   };
 
   const clearAllFilters = () => {
@@ -215,17 +254,14 @@ const ComponentCatalog: React.FC = () => {
     if (searchStrategy) {
       switch (searchStrategy.strategy) {
         case "advanced":
-          // Apply advanced filters to all components
           results = components?.data || [];
 
-          // Apply type filter
           if (searchStrategy.params.type) {
             results = results.filter(
               (c: ComponentResponse) => c.type === searchStrategy.params.type
             );
           }
 
-          // Apply brand filter
           if (searchStrategy.params.brand) {
             results = results.filter((c: ComponentResponse) =>
               c.brand
@@ -234,29 +270,19 @@ const ComponentCatalog: React.FC = () => {
             );
           }
 
-          // Apply compatibility tag filter
           if (searchStrategy.params.compatibilityTag) {
             results = results.filter((c: ComponentResponse) => {
               const searchTag =
                 searchStrategy.params.compatibilityTag.toLowerCase();
 
-              // Search in main compatibilityTag field
               const tagMatch = c.compatibilityTag
                 ?.toLowerCase()
                 .includes(searchTag);
-
-              // Also search in legacy socket field for backward compatibility
               const socketMatch = c.socket?.toLowerCase().includes(searchTag);
-
-              // Search in ramType field for RAM-related searches
               const ramMatch = c.ramType?.toLowerCase().includes(searchTag);
-
-              // Search in formFactor field for form factor searches
               const formFactorMatch = c.formFactor
                 ?.toLowerCase()
                 .includes(searchTag);
-
-              // Search in psuFormFactor field for PSU form factor searches
               const psuFormFactorMatch = c.psuFormFactor
                 ?.toLowerCase()
                 .includes(searchTag);
@@ -271,7 +297,6 @@ const ComponentCatalog: React.FC = () => {
             });
           }
 
-          // Apply max price filter
           if (searchStrategy.params.maxPrice) {
             const maxPrice = parseFloat(searchStrategy.params.maxPrice);
             results = results.filter(
@@ -280,7 +305,6 @@ const ComponentCatalog: React.FC = () => {
             );
           }
 
-          // Apply min stock filter
           if (
             searchStrategy.params.minStock &&
             searchStrategy.params.minStock !== "0"
@@ -294,7 +318,6 @@ const ComponentCatalog: React.FC = () => {
           break;
 
         case "general":
-          // Search across multiple fields: name, brand, compatibilityTag, socket (legacy), ramType, formFactor
           results =
             components?.data?.filter((c: ComponentResponse) => {
               const searchLower = (
@@ -327,28 +350,18 @@ const ComponentCatalog: React.FC = () => {
           break;
 
         case "compatibility":
-          // Temporarily fall back to client-side filtering until hook is available
           results =
             components?.data?.filter((c: ComponentResponse) => {
               const searchTerm = (searchStrategy.params || "").toLowerCase();
 
-              // Search in main compatibilityTag field
               const tagMatch = c.compatibilityTag
                 ?.toLowerCase()
                 .includes(searchTerm);
-
-              // Also search in legacy socket field for backward compatibility
               const socketMatch = c.socket?.toLowerCase().includes(searchTerm);
-
-              // Search in ramType field for RAM-related searches
               const ramMatch = c.ramType?.toLowerCase().includes(searchTerm);
-
-              // Search in formFactor field for form factor searches
               const formFactorMatch = c.formFactor
                 ?.toLowerCase()
                 .includes(searchTerm);
-
-              // Search in psuFormFactor field for PSU form factor searches
               const psuFormFactorMatch = c.psuFormFactor
                 ?.toLowerCase()
                 .includes(searchTerm);
@@ -374,7 +387,6 @@ const ComponentCatalog: React.FC = () => {
     } else if (selectedType) {
       results = typeComponents?.data || [];
     } else if (inStockOnly) {
-      // If only "In Stock Only" is checked with no other filters
       results =
         components?.data?.filter(
           (c: ComponentResponse) => c.stockQuantity && c.stockQuantity > 0
@@ -383,7 +395,6 @@ const ComponentCatalog: React.FC = () => {
       results = [];
     }
 
-    // Apply in-stock filter if checkbox is selected and not already applied
     if (inStockOnly && searchStrategy?.strategy !== "advanced") {
       results = results.filter(
         (c: ComponentResponse) => c.stockQuantity && c.stockQuantity > 0
@@ -400,7 +411,6 @@ const ComponentCatalog: React.FC = () => {
     inStockOnly,
   ]);
 
-  // Get loading state (simplified since we're using client-side filtering for some searches)
   const isSearchLoading = useMemo(() => {
     if (!searchStrategy && !selectedType && !inStockOnly) return false;
 
@@ -409,7 +419,7 @@ const ComponentCatalog: React.FC = () => {
         case "advanced":
         case "general":
         case "compatibility":
-          return isLoading; // Fall back to loading all components for client-side filtering
+          return isLoading;
         case "type":
           return isTypeSearchLoading;
         default:
@@ -427,7 +437,6 @@ const ComponentCatalog: React.FC = () => {
     inStockOnly,
   ]);
 
-  // Get error state (simplified)
   const searchError = useMemo(() => {
     if (!searchStrategy && !selectedType && !inStockOnly) return null;
 
@@ -436,7 +445,7 @@ const ComponentCatalog: React.FC = () => {
         case "advanced":
         case "general":
         case "compatibility":
-          return error; // Fall back to error from loading all components
+          return error;
         case "type":
           return typeSearchError;
         default:
@@ -473,7 +482,22 @@ const ComponentCatalog: React.FC = () => {
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-2xl font-bold">Component Catalog</h2>
+        <div>
+          <h2 className="text-2xl font-bold">Component Catalog</h2>
+          {currentCart && (
+            <p className="text-sm text-gray-600 mt-1">
+              Adding to: <span className="font-medium">{currentCart.name}</span>
+              <span className="ml-2 text-green-600">
+                ${currentCart.totalPrice?.toFixed(2) || "0.00"}
+              </span>
+            </p>
+          )}
+          {!currentCart && (
+            <p className="text-sm text-red-600 mt-1">
+              No cart selected. Create a cart in Cart Management to add items.
+            </p>
+          )}
+        </div>
         <div className="flex gap-2">
           <button
             onClick={clearAllFilters}
@@ -650,6 +674,15 @@ const ComponentCatalog: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* Quantity Selection Modal */}
+      <QuantityModal
+        component={quantityModal.component!}
+        isOpen={quantityModal.isOpen}
+        onClose={closeModal}
+        onConfirm={handleQuantityConfirm}
+        actionType={quantityModal.actionType}
+      />
     </div>
   );
 };

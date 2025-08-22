@@ -6,14 +6,14 @@ import Navigation from "./components/Navigation";
 import CartManagement from "./pages/CartManagement.tsx";
 import ComponentCatalog from "./pages/ComponentCatalog.tsx";
 import BuildRequests from "./pages/BuildRequests.tsx";
+import { CartProvider } from "./contexts/CartContext";
 
-// Create a client
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5, // 5 minutes
+      staleTime: 1000 * 60 * 5,
       retry: 1,
-      refetchOnWindowFocus: false, // Prevents refetching when user returns to tab
+      refetchOnWindowFocus: false,
     },
   },
 });
@@ -36,11 +36,16 @@ const App = () => {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="min-h-screen bg-gray-100">
-        <Navigation activeTab={activeTab} setActiveTab={setActiveTab} />
-        <main className="max-w-7xl mx-auto">{renderContent()}</main>
-      </div>
-      <ReactQueryDevtools initialIsOpen={false} />
+      <CartProvider>
+        {" "}
+        {/* ADD THIS */}
+        <div className="min-h-screen bg-gray-100">
+          <Navigation activeTab={activeTab} setActiveTab={setActiveTab} />
+          <main className="max-w-7xl mx-auto">{renderContent()}</main>
+        </div>
+        <ReactQueryDevtools initialIsOpen={false} />
+      </CartProvider>{" "}
+      {/* ADD THIS */}
     </QueryClientProvider>
   );
 };
