@@ -5,7 +5,8 @@ import { useSelectedUserId } from "../contexts/UserContext";
 import {
   useGetUserCarts,
   useCreateCartForUser,
-  useFinalizeCart,
+  useDeleteCart,
+  useUpdateCart,
 } from "../api/build-cart-controller/build-cart-controller";
 import {
   useCreateItem,
@@ -15,18 +16,19 @@ import {
 } from "../api/cart-item-controller/cart-item-controller";
 import { useGetAllComponents } from "../api/component-controller/component-controller";
 import type { ComponentResponse, CartItemRequest } from "../api/model";
+import CheckoutModal from "../modals/CheckoutModal";
 
 const CartManagement = () => {
   const queryClient = useQueryClient();
-  const selectedUserId = useSelectedUserId(); // Use selected user from context
+  const selectedUserId = useSelectedUserId();
   const { selectCart, selectedCartId } = useCart();
   const [isCreatingCart, setIsCreatingCart] = useState(false);
   const [newCartName, setNewCartName] = useState("");
   const [addComponentId, setAddComponentId] = useState("");
   const [addQuantity, setAddQuantity] = useState(1);
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
 
   // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL LOGIC
-  // API calls - use enabled to control when they run
   const {
     data: userCarts,
     isLoading: cartsLoading,
@@ -39,14 +41,21 @@ const CartManagement = () => {
 
   // Mutations
   const createCartMutation = useCreateCartForUser();
-  const finalizeCartMutation = useFinalizeCart();
   const createItemMutation = useCreateItem();
   const updateQuantityMutation = useUpdateQuantity();
   const deleteItemMutation = useDeleteItem();
+  const deleteCartMutation = useDeleteCart();
+  const updateCartMutation = useUpdateCart();
 
   // Get active carts and current cart
   const activeCarts = useMemo(
     () => userCarts?.data?.filter((cart) => cart.status === "ACTIVE") || [],
+    [userCarts]
+  );
+
+  // Get finalized carts for management
+  const finalizedCarts = useMemo(
+    () => userCarts?.data?.filter((cart) => cart.status === "FINALIZED") || [],
     [userCarts]
   );
 
@@ -65,7 +74,7 @@ const CartManagement = () => {
 
   const cartItems = cartItemsData?.data || [];
 
-  // NOW we can handle conditional rendering AFTER all hooks are called
+  // Handle conditional rendering AFTER all hooks are called
   if (!selectedUserId) {
     return (
       <div className="p-6">
@@ -173,6 +182,7 @@ const CartManagement = () => {
 
   const handleRemoveItem = async (itemId: number) => {
     if (!selectedUserId) return;
+
     const confirmDelete = window.confirm(
       "Are you sure you want to remove this item from your cart?"
     );
@@ -198,36 +208,72 @@ const CartManagement = () => {
     }
   };
 
-  const handleFinalizeCart = async () => {
+  const handleFinalizeCart = () => {
     if (!currentCart || !selectedUserId) return;
 
-    const confirmFinalize = window.confirm(
-      `Are you sure you want to finalize "${
-        currentCart.name
-      }"? This will deduct $${currentCart.totalPrice?.toFixed(
-        2
-      )} from your budget.`
-    );
+    // Open checkout modal
+    setShowCheckoutModal(true);
+  };
 
-    if (confirmFinalize) {
-      try {
-        await finalizeCartMutation.mutateAsync({ cartId: currentCart.id! });
-        queryClient.invalidateQueries({
-          queryKey: [`/api/v1/carts/user/${selectedUserId}`],
-        });
-        // Also refresh user data to show updated budget
-        queryClient.invalidateQueries({
-          queryKey: ["/api/v1/users"],
-        });
-      } catch (error: any) {
-        console.error("Failed to finalize cart:", error);
-        alert(
-          `Failed to finalize cart: ${
-            error.response?.data?.message ||
-            "Please check if you have sufficient budget."
-          }`
-        );
+  const handleDeleteCart = async (cartId: number, cartName: string) => {
+    if (!selectedUserId) return;
+
+    const confirmDelete = window.confirm(
+      `Are you sure you want to permanently delete "${cartName}"? This action cannot be undone.`
+    );
+    if (!confirmDelete) return;
+
+    try {
+      await deleteCartMutation.mutateAsync({ id: cartId });
+
+      // Refresh cart data
+      queryClient.invalidateQueries({
+        queryKey: [`/api/v1/carts/user/${selectedUserId}`],
+      });
+
+      // If we deleted the currently selected cart, clear selection
+      if (selectedCartId === cartId) {
+        selectCart(0);
       }
+    } catch (error: any) {
+      console.error("Failed to delete cart:", error);
+      alert(
+        `Failed to delete cart: ${
+          error.response?.data?.message || error.message
+        }`
+      );
+    }
+  };
+
+  const handleReturnToDraft = async (cartId: number, cartName: string) => {
+    if (!selectedUserId) return;
+
+    const confirmReturn = window.confirm(
+      `Are you sure you want to return "${cartName}" to active status? This will make it editable again.`
+    );
+    if (!confirmReturn) return;
+
+    try {
+      await updateCartMutation.mutateAsync({
+        id: cartId,
+        data: { name: cartName, status: "ACTIVE" },
+      });
+
+      // Refresh cart data
+      queryClient.invalidateQueries({
+        queryKey: [`/api/v1/carts/user/${selectedUserId}`],
+      });
+      // Also refresh user data to show updated budget
+      queryClient.invalidateQueries({
+        queryKey: ["/api/v1/users"],
+      });
+    } catch (error: any) {
+      console.error("Failed to return cart to active:", error);
+      alert(
+        `Failed to return cart to active: ${
+          error.response?.data?.message || error.message
+        }`
+      );
     }
   };
 
@@ -320,129 +366,297 @@ const CartManagement = () => {
         </div>
       )}
 
-      {/* Current Cart */}
-      {currentCart ? (
-        <div className="bg-white rounded-lg shadow border">
-          <div className="p-6 border-b">
-            <div className="flex justify-between items-center">
-              <div>
-                <h3 className="text-xl font-bold text-gray-900">
-                  {currentCart.name}
-                </h3>
-                <p className="text-gray-600">
-                  Total: ${currentCart.totalPrice?.toFixed(2) || "0.00"}
-                </p>
+      {/* Main Content Area - Dual Column Layout */}
+      {activeCarts.length === 0 ? (
+        <div className="text-center py-12 bg-gray-50 rounded-lg">
+          <h3 className="text-xl font-semibold text-gray-600 mb-2">
+            No Active Carts
+          </h3>
+          <p className="text-gray-500 mb-4">
+            Create your first cart to start building!
+          </p>
+          <button
+            onClick={() => setIsCreatingCart(true)}
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+          >
+            Create Your First Cart
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Current Cart Items - Takes 2 columns */}
+          <div className="lg:col-span-2">
+            <div className="bg-white rounded-lg shadow-md">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-xl font-semibold">
+                    {currentCart?.name || "No Cart Selected"}
+                  </h3>
+                  {currentCart && (
+                    <div className="text-2xl font-bold text-blue-600">
+                      ${currentCart.totalPrice?.toFixed(2) || "0.00"}
+                    </div>
+                  )}
+                </div>
+                {itemsLoading && (
+                  <div className="text-sm text-gray-500 mt-2">
+                    Loading items...
+                  </div>
+                )}
               </div>
-              <button
-                onClick={handleFinalizeCart}
-                disabled={!cartItems.length}
-                className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 font-medium"
-              >
-                Finalize Cart
-              </button>
+
+              <div className="p-6">
+                {cartItems.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="text-gray-400 text-6xl mb-4">🛒</div>
+                    <h4 className="text-lg font-medium text-gray-600 mb-2">
+                      Cart is Empty
+                    </h4>
+                    <p className="text-gray-500">
+                      Add components to get started with your build
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {cartItems.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                      >
+                        <div className="flex-1">
+                          <h4 className="font-semibold">
+                            {item.componentName}
+                          </h4>
+                          <p className="text-sm text-gray-600">
+                            Component ID: {item.componentId}
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            Quantity: {item.quantity || 0}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() =>
+                                handleUpdateQuantity(
+                                  item.id!,
+                                  (item.quantity || 1) - 1
+                                )
+                              }
+                              disabled={(item.quantity || 0) <= 1}
+                              className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center hover:bg-gray-300 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                            >
+                              -
+                            </button>
+                            <span className="w-8 text-center font-medium">
+                              {item.quantity || 0}
+                            </span>
+                            <button
+                              onClick={() =>
+                                handleUpdateQuantity(
+                                  item.id!,
+                                  (item.quantity || 1) + 1
+                                )
+                              }
+                              className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center hover:bg-gray-300"
+                            >
+                              +
+                            </button>
+                          </div>
+
+                          <button
+                            onClick={() => handleRemoveItem(item.id!)}
+                            className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-sm"
+                            title="Remove this item completely"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Add Component Form */}
-          <div className="p-6 border-b bg-gray-50">
-            <h4 className="text-lg font-semibold mb-3">Add Component</h4>
-            <div className="flex gap-3">
-              <select
-                value={addComponentId}
-                onChange={(e) => setAddComponentId(e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Select a component...</option>
-                {allComponents?.data?.map((component: ComponentResponse) => (
-                  <option key={component.id} value={component.id}>
-                    {component.name} - ${component.price} ({component.type})
-                  </option>
-                ))}
-              </select>
-              <input
-                type="number"
-                value={addQuantity}
-                onChange={(e) => setAddQuantity(parseInt(e.target.value) || 1)}
-                min="1"
-                className="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <button
-                onClick={handleAddComponent}
-                disabled={!addComponentId}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
-              >
-                Add
-              </button>
+          {/* Sidebar - Add Components & Actions - Takes 1 column */}
+          <div className="space-y-6">
+            {/* Add Component Card */}
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <h3 className="text-lg font-semibold mb-4">Add Component</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Component
+                  </label>
+                  <select
+                    value={addComponentId}
+                    onChange={(e) => setAddComponentId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select a component...</option>
+                    {allComponents?.data?.map(
+                      (component: ComponentResponse) => (
+                        <option key={component.id} value={component.id}>
+                          {component.name} - ${component.price} (
+                          {component.type})
+                        </option>
+                      )
+                    )}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Quantity
+                  </label>
+                  <input
+                    type="number"
+                    value={addQuantity}
+                    onChange={(e) =>
+                      setAddQuantity(parseInt(e.target.value) || 1)
+                    }
+                    min="1"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <button
+                  onClick={handleAddComponent}
+                  disabled={!addComponentId}
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 font-medium"
+                >
+                  Add to Cart
+                </button>
+              </div>
             </div>
+
+            {/* Cart Actions Card */}
+            {currentCart && (
+              <div className="bg-white rounded-lg shadow-md p-6">
+                <h3 className="text-lg font-semibold mb-4">Cart Actions</h3>
+                <div className="space-y-3">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600 mb-1">
+                      ${currentCart.totalPrice?.toFixed(2) || "0.00"}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      {cartItems.length} item{cartItems.length !== 1 ? "s" : ""}{" "}
+                      in cart
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleFinalizeCart}
+                    disabled={cartItems.length === 0}
+                    className="w-full bg-green-600 text-white p-3 rounded-lg hover:bg-green-700 disabled:bg-gray-400 font-medium"
+                  >
+                    Finalize & Checkout
+                  </button>
+
+                  <button
+                    onClick={() =>
+                      handleDeleteCart(
+                        currentCart.id!,
+                        currentCart.name || "Unnamed Cart"
+                      )
+                    }
+                    className="w-full bg-red-600 text-white p-3 rounded-lg hover:bg-red-700 font-medium"
+                  >
+                    Delete Cart
+                  </button>
+
+                  <p className="text-xs text-gray-500 text-center">
+                    Finalizing will show detailed tax breakdown and deduct the
+                    total from your budget.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Finalized Carts Management Section */}
+      {finalizedCarts.length > 0 && (
+        <div className="mt-8">
+          <div className="mb-4">
+            <h3 className="text-xl font-bold text-gray-900">
+              Finalized Builds
+            </h3>
+            <p className="text-gray-600">
+              Manage your completed builds - delete or return to active status
+            </p>
           </div>
 
-          {/* Cart Items */}
-          <div className="p-6">
-            <h4 className="text-lg font-semibold mb-4">Cart Items</h4>
-
-            {itemsLoading ? (
-              <div className="text-center py-8">Loading cart items...</div>
-            ) : cartItems.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                No items in cart. Add some components above!
-              </div>
-            ) : (
+          <div className="bg-white rounded-lg shadow border">
+            <div className="p-6">
               <div className="space-y-3">
-                {cartItems.map((item) => (
+                {finalizedCarts.map((cart) => (
                   <div
-                    key={item.id}
-                    className="flex justify-between items-center p-3 bg-gray-50 rounded-lg"
+                    key={cart.id}
+                    className="flex justify-between items-center p-4 bg-gray-50 rounded-lg border"
                   >
                     <div className="flex-1">
-                      <h5 className="font-medium">{item.componentName}</h5>
-                      <p className="text-sm text-gray-600">
-                        Component ID: {item.componentId}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm">Qty:</span>
-                        <input
-                          type="number"
-                          value={item.quantity}
-                          onChange={(e) =>
-                            handleUpdateQuantity(
-                              item.id!,
-                              parseInt(e.target.value) || 1
-                            )
-                          }
-                          min="1"
-                          className="w-16 px-2 py-1 border border-gray-300 rounded text-center"
-                        />
+                      <div className="flex items-center gap-3">
+                        <h4 className="font-semibold text-gray-900">
+                          {cart.name}
+                        </h4>
+                        <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full font-medium">
+                          FINALIZED
+                        </span>
                       </div>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Total Cost: ${cart.totalPrice?.toFixed(2) || "0.00"}
+                      </p>
+                      {cart.finalizedAt && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Finalized:{" "}
+                          {new Date(cart.finalizedAt).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
                       <button
-                        onClick={() => handleRemoveItem(item.id!)}
-                        className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                        onClick={() =>
+                          handleReturnToDraft(
+                            cart.id!,
+                            cart.name || "Unnamed Cart"
+                          )
+                        }
+                        className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-medium"
+                        title="Return to active status for editing"
                       >
-                        Remove
+                        Return to Active
+                      </button>
+                      <button
+                        onClick={() =>
+                          handleDeleteCart(
+                            cart.id!,
+                            cart.name || "Unnamed Cart"
+                          )
+                        }
+                        className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm font-medium"
+                        title="Permanently delete this build"
+                      >
+                        Delete
                       </button>
                     </div>
                   </div>
                 ))}
               </div>
-            )}
+            </div>
           </div>
         </div>
-      ) : (
-        <div className="bg-white rounded-lg shadow border p-8 text-center">
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">
-            No Active Carts
-          </h3>
-          <p className="text-gray-600 mb-4">
-            Create a new cart to start building your PC.
-          </p>
-          <button
-            onClick={() => setIsCreatingCart(true)}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
-          >
-            Create Your First Cart
-          </button>
-        </div>
+      )}
+
+      {/* Checkout Modal */}
+      {currentCart && (
+        <CheckoutModal
+          isOpen={showCheckoutModal}
+          onClose={() => setShowCheckoutModal(false)}
+          cart={currentCart}
+        />
       )}
     </div>
   );
