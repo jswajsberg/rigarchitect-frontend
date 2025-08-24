@@ -1,4 +1,4 @@
-// src/contexts/UserContext.tsx
+// src/contexts/UserContext.tsx - Updated to integrate with AuthContext
 import React, {
   createContext,
   useContext,
@@ -10,13 +10,14 @@ import {
   useGetAllUsers,
   useGetCurrentUser,
 } from "../api/user-controller/user-controller";
+import { useAuth } from "./AuthContext";
 import type { UserResponse } from "../api/model";
 
 interface UserContextType {
-  // Current selected user
+  // Current selected user (for admin/multi-user management)
   selectedUser: UserResponse | null;
 
-  // All available users
+  // All available users (for admin features)
   allUsers: UserResponse[];
 
   // Loading states
@@ -39,29 +40,47 @@ interface UserProviderProps {
 }
 
 export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
+  const { user: authUser, isAuthenticated } = useAuth();
   const [selectedUser, setSelectedUser] = useState<UserResponse | null>(null);
 
-  // Fetch all users for selection
+  // Fetch all users for admin/selection features
   const {
     data: allUsersData,
     isLoading: isLoadingUsers,
     error: usersError,
     refetch: refetchUsers,
-  } = useGetAllUsers();
+  } = useGetAllUsers({
+    query: {
+      enabled: isAuthenticated, // Only fetch if authenticated
+    },
+  });
 
-  // Fetch current user (default selection)
+  // Fetch current user (fallback for when auth user isn't available)
   const {
     data: currentUserData,
     isLoading: isLoadingCurrentUser,
     error: currentUserError,
-  } = useGetCurrentUser();
+  } = useGetCurrentUser({
+    query: {
+      enabled: isAuthenticated && !authUser, // Only if authenticated but no auth user
+    },
+  });
 
-  // Set initial selected user when current user data loads
+  // Set initial selected user based on authenticated user or current user
   useEffect(() => {
-    if (currentUserData?.data && !selectedUser) {
-      setSelectedUser(currentUserData.data);
+    if (isAuthenticated) {
+      if (authUser && !selectedUser) {
+        // Use authenticated user as selected user
+        setSelectedUser(authUser);
+      } else if (currentUserData?.data && !selectedUser && !authUser) {
+        // Fallback to current user endpoint
+        setSelectedUser(currentUserData.data);
+      }
+    } else {
+      // Clear selected user when not authenticated
+      setSelectedUser(null);
     }
-  }, [currentUserData, selectedUser]);
+  }, [authUser, currentUserData, selectedUser, isAuthenticated]);
 
   // Extract users array from response
   const allUsers = allUsersData?.data || [];
@@ -108,4 +127,18 @@ export const useSelectedUser = () => {
 export const useSelectedUserId = () => {
   const { selectedUser } = useUserContext();
   return selectedUser?.id || null;
+};
+
+// New helper hooks that prioritize auth user
+export const useCurrentUser = () => {
+  const { user: authUser } = useAuth();
+  const { selectedUser } = useUserContext();
+
+  // Return authenticated user first, then selected user
+  return authUser || selectedUser;
+};
+
+export const useCurrentUserId = () => {
+  const currentUser = useCurrentUser();
+  return currentUser?.id || null;
 };

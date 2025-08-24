@@ -1,12 +1,15 @@
+// src/App.tsx - Updated with authentication
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
+import { AuthProvider } from "./contexts/AuthContext";
 import { UserProvider } from "./contexts/UserContext";
 import { CartProvider } from "./contexts/CartContext";
 import {
   NavigationProvider,
   useNavigation,
 } from "./contexts/NavigationContext";
+import ProtectedRoute from "./components/ProtectedRoute";
 import Navigation from "./components/Navigation";
 import CartManagement from "./pages/CartManagement";
 import ComponentCatalog from "./pages/ComponentCatalog";
@@ -24,7 +27,7 @@ const queryClient = new QueryClient({
   },
 });
 
-// Main App Content Component
+// Main App Content Component (Protected)
 const AppContent = () => {
   const { activeTab, setActiveTab } = useNavigation();
 
@@ -51,18 +54,29 @@ const AppContent = () => {
   );
 };
 
+// Protected App Wrapper
+const ProtectedApp = () => {
+  return (
+    <UserProvider>
+      <CartProvider>
+        <NavigationProvider>
+          <ProtectedRoute>
+            <AppContent />
+          </ProtectedRoute>
+        </NavigationProvider>
+      </CartProvider>
+    </UserProvider>
+  );
+};
+
 // Main App Component with all providers
 const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
-      <UserProvider>
-        <CartProvider>
-          <NavigationProvider>
-            <AppContent />
-            <ReactQueryDevtools initialIsOpen={false} />
-          </NavigationProvider>
-        </CartProvider>
-      </UserProvider>
+      <AuthProvider>
+        <ProtectedApp />
+        <ReactQueryDevtools initialIsOpen={false} />
+      </AuthProvider>
     </QueryClientProvider>
   );
 };
