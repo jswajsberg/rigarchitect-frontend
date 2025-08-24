@@ -1,3 +1,5 @@
+// src/components/SearchBar.tsx
+
 export interface SearchFilters {
   type: string;
   brand: string;
@@ -38,7 +40,7 @@ const SearchBar = ({
         <div className="flex gap-2">
           <input
             type="text"
-            placeholder="Search by name, brand, compatibility (e.g., AM4, DDR4, ATX), or component type..."
+            placeholder="Search components (try: mobo, gfx, mem, cooler, AM4, DDR5, ATX, brand names...)"
             value={searchTerm}
             onChange={(e) => onSearchTermChange(e.target.value)}
             className="flex-1 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -70,87 +72,106 @@ const SearchBar = ({
         </div>
         {!showAdvancedSearch && (
           <div className="text-xs text-gray-500 mt-1">
-            Smart search: detects component types, compatibility tags (AM4,
-            DDR4, ATX, etc.), RAM terms (DDR), or searches across all fields
-            {inStockOnly && " • Showing only items in stock"}
+            Smart search with slang support: mobo→motherboard, gfx→GPU, mem→RAM,
+            etc. Also detects compatibility (AM4, DDR4, ATX) and component
+            types.
           </div>
         )}
       </div>
 
-      {/* Advanced Search */}
+      {/* Advanced Search Filters */}
       {showAdvancedSearch && (
-        <div className="border-t pt-4">
-          <h4 className="font-medium mb-3">Advanced Filters</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Type</label>
-              <select
-                value={filters.type}
-                onChange={(e) => onFilterChange("type", e.target.value)}
-                className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                disabled={disabled}
-              >
-                <option value="">Any Type</option>
-                {componentTypes.map((type) => (
-                  <option key={type.id} value={type.id}>
-                    {type.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Brand</label>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Component Type
+            </label>
+            <select
+              value={filters.type}
+              onChange={(e) => onFilterChange("type", e.target.value)}
+              className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={disabled}
+            >
+              <option value="">All Types</option>
+              {componentTypes.map((type) => (
+                <option key={type.id} value={type.id}>
+                  {type.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Brand
+            </label>
+            <input
+              type="text"
+              placeholder="e.g., ASUS, MSI, Intel"
+              value={filters.brand}
+              onChange={(e) => onFilterChange("brand", e.target.value)}
+              className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={disabled}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Compatibility
+            </label>
+            <input
+              type="text"
+              placeholder="e.g., AM4, DDR4, ATX"
+              value={filters.compatibilityTag}
+              onChange={(e) =>
+                onFilterChange("compatibilityTag", e.target.value)
+              }
+              className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={disabled}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Max Price ($)
+            </label>
+            <input
+              type="number"
+              placeholder="e.g., 500"
+              value={filters.maxPrice}
+              onChange={(e) => onFilterChange("maxPrice", e.target.value)}
+              className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={disabled}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Min Stock
+            </label>
+            <input
+              type="number"
+              placeholder="Minimum quantity"
+              value={filters.minStock}
+              onChange={(e) => onFilterChange("minStock", e.target.value)}
+              className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={disabled}
+            />
+          </div>
+
+          <div className="flex items-end">
+            <label className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded hover:bg-green-100 h-10">
               <input
-                type="text"
-                placeholder="e.g., Intel, AMD, NVIDIA"
-                value={filters.brand}
-                onChange={(e) => onFilterChange("brand", e.target.value)}
-                className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                type="checkbox"
+                checked={inStockOnly}
+                onChange={(e) => onInStockOnlyChange(e.target.checked)}
+                className="rounded"
                 disabled={disabled}
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Compatibility Tag
-              </label>
-              <input
-                type="text"
-                placeholder="e.g., AM4, DDR4, ATX, PCIe4.0"
-                value={filters.compatibilityTag}
-                onChange={(e) =>
-                  onFilterChange("compatibilityTag", e.target.value)
-                }
-                className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                disabled={disabled}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Max Price
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                placeholder="e.g., 500.00"
-                value={filters.maxPrice}
-                onChange={(e) => onFilterChange("maxPrice", e.target.value)}
-                className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                disabled={disabled}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Min Stock
-              </label>
-              <input
-                type="number"
-                placeholder="0"
-                value={filters.minStock}
-                onChange={(e) => onFilterChange("minStock", e.target.value)}
-                className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                disabled={disabled}
-              />
-            </div>
+              <span className="text-sm font-medium text-green-700">
+                In Stock Only
+              </span>
+            </label>
           </div>
         </div>
       )}

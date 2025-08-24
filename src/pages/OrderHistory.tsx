@@ -1,12 +1,14 @@
 import { useState, useMemo } from "react";
 import { useSelectedUserId } from "../contexts/UserContext";
+import { useNavigation } from "../contexts/NavigationContext";
 import { useGetUserCarts } from "../api/build-cart-controller/build-cart-controller";
 import { useGetItemsByCart } from "../api/cart-item-controller/cart-item-controller";
 import { useGetAllComponents } from "../api/component-controller/component-controller";
 import type { BuildCartResponse, ComponentResponse } from "../api/model";
 
-const OrderHistory = () => {
+const OrderHistory: React.FC = () => {
   const selectedUserId = useSelectedUserId();
+  const { setActiveTab } = useNavigation(); // Clean uniform access!
   const [expandedOrderId, setExpandedOrderId] = useState<number | null>(null);
 
   // Get all user carts
@@ -100,7 +102,6 @@ const OrderHistory = () => {
           View your completed PC build purchases and download receipts
         </p>
       </div>
-
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <div className="bg-white rounded-lg shadow-md p-6">
@@ -157,7 +158,7 @@ const OrderHistory = () => {
             You haven't completed any purchases yet. Start building your PC!
           </p>
           <button
-            onClick={() => (window.location.href = "#")}
+            onClick={() => setActiveTab("components")}
             className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
           >
             Browse Components

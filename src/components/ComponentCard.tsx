@@ -58,14 +58,14 @@ const ComponentCard = ({
   const getRelevantDetails = (): ComponentDetail[] => {
     const details: ComponentDetail[] = [];
 
-    // Always show compatibility tag if available
-    if (component.compatibilityTag) {
-      details.push({
-        label: "Compatibility",
-        value: component.compatibilityTag,
-        important: true,
-      });
-    }
+    // // Always show compatibility tag if available
+    // if (component.compatibilityTag) {
+    //   details.push({
+    //     label: "Compatibility",
+    //     value: component.compatibilityTag,
+    //     important: true,
+    //   });
+    // }
 
     // Type-specific important details
     switch (component.type) {
@@ -177,7 +177,6 @@ const ComponentCard = ({
 
   const getAllDetails = (): ComponentDetail[] => {
     const allDetails: ComponentDetail[] = [
-      // Remove component ID - internal use only
       { label: "Brand", value: component.brand },
       { label: "Type", value: component.type },
       { label: "Compatibility Tag", value: component.compatibilityTag },
@@ -211,8 +210,8 @@ const ComponentCard = ({
   return (
     <div className="bg-white border rounded-lg shadow hover:shadow-md transition-all duration-200">
       {/* Card Header - Always Visible */}
-      <div className="p-4">
-        <div className="flex items-start justify-between mb-3">
+      <div className="p-5">
+        <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
             <span className="text-2xl">
               {getComponentTypeIcon(component.type)}
@@ -231,7 +230,7 @@ const ComponentCard = ({
               {formatPrice(component.price)}
             </div>
             <div
-              className={`text-xs px-2 py-1 rounded-full ${stockStatus.bgColor} ${stockStatus.color}`}
+              className={`text-xs px-2 py-1 rounded-full mt-1 ${stockStatus.bgColor} ${stockStatus.color}`}
             >
               {stockStatus.text}
             </div>
@@ -240,7 +239,7 @@ const ComponentCard = ({
 
         {/* Quick Details - Always Visible */}
         {relevantDetails.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-3">
+          <div className="flex flex-wrap gap-2 mb-4">
             {relevantDetails.slice(0, 3).map((detail, index) => (
               <span
                 key={index}
@@ -261,25 +260,29 @@ const ComponentCard = ({
           </div>
         )}
 
-        {/* Action Buttons */}
-        <div className="flex gap-2 justify-between items-center">
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
-          >
-            {isExpanded ? "Show Less" : "Show Details"}
-            <span className="text-xs">{isExpanded ? "▲" : "▼"}</span>
-          </button>
+        {/* Action Buttons - Improved Layout */}
+        <div className="flex flex-col gap-3">
+          {/* Show Details Button */}
+          <div className="flex justify-start">
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+            >
+              {isExpanded ? "Show Less" : "Show Details"}
+              <span className="text-xs">{isExpanded ? "▲" : "▼"}</span>
+            </button>
+          </div>
 
+          {/* Cart Action Buttons */}
           {showCartButtons && (
-            <div className="flex gap-2">
+            <div className="flex gap-3">
               {onAddToBuildCart && (
                 <button
                   onClick={() => onAddToBuildCart(component)}
                   disabled={
                     !component.stockQuantity || component.stockQuantity <= 0
                   }
-                  className="px-3 py-1 text-sm bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                  className="flex-1 px-4 py-2 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                 >
                   Add to Build
                 </button>
@@ -290,7 +293,7 @@ const ComponentCard = ({
                   disabled={
                     !component.stockQuantity || component.stockQuantity <= 0
                   }
-                  className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                  className="flex-1 px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                 >
                   Buy Now
                 </button>
@@ -302,7 +305,7 @@ const ComponentCard = ({
 
       {/* Expanded Details */}
       {isExpanded && (
-        <div className="border-t bg-gray-50 p-4">
+        <div className="border-t bg-gray-50 p-5">
           <h4 className="font-medium text-gray-900 mb-3">
             Technical Specifications
           </h4>

@@ -1,9 +1,12 @@
-import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
 import { UserProvider } from "./contexts/UserContext";
 import { CartProvider } from "./contexts/CartContext";
+import {
+  NavigationProvider,
+  useNavigation,
+} from "./contexts/NavigationContext";
 import Navigation from "./components/Navigation";
 import CartManagement from "./pages/CartManagement";
 import ComponentCatalog from "./pages/ComponentCatalog";
@@ -21,8 +24,9 @@ const queryClient = new QueryClient({
   },
 });
 
-const App = () => {
-  const [activeTab, setActiveTab] = useState("cart");
+// Main App Content Component
+const AppContent = () => {
+  const { activeTab, setActiveTab } = useNavigation();
 
   const renderContent = () => {
     switch (activeTab) {
@@ -40,14 +44,23 @@ const App = () => {
   };
 
   return (
+    <div className="min-h-screen bg-gray-100">
+      <Navigation activeTab={activeTab} setActiveTab={setActiveTab} />
+      <main className="max-w-7xl mx-auto">{renderContent()}</main>
+    </div>
+  );
+};
+
+// Main App Component with all providers
+const App = () => {
+  return (
     <QueryClientProvider client={queryClient}>
       <UserProvider>
         <CartProvider>
-          <div className="min-h-screen bg-gray-100">
-            <Navigation activeTab={activeTab} setActiveTab={setActiveTab} />
-            <main className="max-w-7xl mx-auto">{renderContent()}</main>
-          </div>
-          <ReactQueryDevtools initialIsOpen={false} />
+          <NavigationProvider>
+            <AppContent />
+            <ReactQueryDevtools initialIsOpen={false} />
+          </NavigationProvider>
         </CartProvider>
       </UserProvider>
     </QueryClientProvider>
