@@ -56,6 +56,9 @@ export function checkBuildCompatibility(
   // Check memory compatibility
   issues.push(...checkMemoryCompatibility(build));
 
+  // Check cooler compatibility
+  issues.push(...checkCoolerCompatibility(build));
+
   // Check power requirements
   const powerResult = checkPowerCompatibility(build);
   issues.push(...powerResult.issues);
@@ -101,6 +104,33 @@ function checkSocketCompatibility(build: BuildSlots): CompatibilityIssue[] {
 }
 
 /**
+ * Check CPU cooler socket compatibility
+ */
+function checkCoolerCompatibility(build: BuildSlots): CompatibilityIssue[] {
+  const issues: CompatibilityIssue[] = [];
+  const { CPU, Cooler } = build;
+
+  if (CPU && Cooler && CPU.socket) {
+    const supportedSockets = Cooler.extraCompatibility
+      ?.socket_support as unknown;
+
+    if (
+      Array.isArray(supportedSockets) &&
+      !supportedSockets.includes(CPU.socket)
+    ) {
+      issues.push({
+        type: "error",
+        message: `CPU cooler does not support ${CPU.socket} socket`,
+        affectedComponents: [CPU.name || "CPU", Cooler.name || "Cooler"],
+        category: "socket",
+      });
+    }
+  }
+
+  return issues;
+}
+
+/**
  * Check memory (RAM) compatibility with CPU and motherboard
  */
 function checkMemoryCompatibility(build: BuildSlots): CompatibilityIssue[] {
@@ -109,12 +139,14 @@ function checkMemoryCompatibility(build: BuildSlots): CompatibilityIssue[] {
 
   if (RAM && RAM.length > 0) {
     const ramType = RAM[0].ramType;
+    const firstRamSpeed = (RAM[0] as any).ramSpeed; // Using any to access property that might not be in interface
 
     // Check CPU memory support
     if (CPU && CPU.extraCompatibility) {
       const cpuCompat = CPU.extraCompatibility as Record<string, unknown>;
       const ddr4Support = cpuCompat.ddr4_support;
       const ddr5Support = cpuCompat.ddr5_support;
+      const maxRamSpeed = cpuCompat.max_ram_speed as number;
 
       if (ramType === "DDR4" && ddr4Support === false) {
         issues.push({
@@ -139,6 +171,19 @@ function checkMemoryCompatibility(build: BuildSlots): CompatibilityIssue[] {
           category: "memory",
         });
       }
+
+      // Check RAM speed compatibility
+      if (maxRamSpeed && firstRamSpeed && firstRamSpeed > maxRamSpeed) {
+        issues.push({
+          type: "warning",
+          message: `RAM speed ${firstRamSpeed}MHz exceeds CPU maximum supported speed of ${maxRamSpeed}MHz`,
+          affectedComponents: [
+            ...RAM.map((r) => r.name || "RAM"),
+            CPU.name || "CPU",
+          ],
+          category: "memory",
+        });
+      }
     }
 
     // Check motherboard memory support
@@ -156,6 +201,13 @@ function checkMemoryCompatibility(build: BuildSlots): CompatibilityIssue[] {
 
     // Check for mixed RAM types
     const ramTypes = new Set(RAM.map((r) => r.ramType).filter(Boolean));
+    const ramSpeeds = new Set(
+      RAM.map((r) => (r as any).ramSpeed).filter(Boolean)
+    );
+    const ramCapacities = new Set(
+      RAM.map((r) => (r as any).ramCapacity).filter(Boolean)
+    );
+
     if (ramTypes.size > 1) {
       issues.push({
         type: "error",
@@ -163,6 +215,47 @@ function checkMemoryCompatibility(build: BuildSlots): CompatibilityIssue[] {
         affectedComponents: RAM.map((r) => r.name || "RAM"),
         category: "memory",
       });
+    }
+
+    if (ramSpeeds.size > 1) {
+      issues.push({
+        type: "warning",
+        message:
+          "Mixed RAM speeds detected. System will run at the lowest speed",
+        affectedComponents: RAM.map((r) => r.name || "RAM"),
+        category: "memory",
+      });
+    }
+
+    if (ramCapacities.size > 1) {
+      issues.push({
+        type: "warning",
+        message:
+          "Mixed RAM capacities detected. Consider using matching capacity sticks for optimal performance",
+        affectedComponents: RAM.map((r) => r.name || "RAM"),
+        category: "memory",
+      });
+    }
+
+    // Check motherboard RAM slot capacity
+    if (Motherboard && Motherboard.extraCompatibility) {
+      const mbCompat = Motherboard.extraCompatibility as Record<
+        string,
+        unknown
+      >;
+      const maxRamSlots = mbCompat.ram_slots as number;
+
+      if (maxRamSlots && RAM.length > maxRamSlots) {
+        issues.push({
+          type: "error",
+          message: `Too many RAM sticks (${RAM.length}) for motherboard capacity (${maxRamSlots} slots)`,
+          affectedComponents: [
+            ...RAM.map((r) => r.name || "RAM"),
+            Motherboard.name || "Motherboard",
+          ],
+          category: "memory",
+        });
+      }
     }
   }
 
@@ -205,7 +298,11 @@ function checkPowerCompatibility(build: BuildSlots): {
   }
 
   if (build.Cooler) {
-    totalPower += POWER_ESTIMATES.Cooler.base;
+    const coolerName = build.Cooler.name?.toLowerCase() || "";
+    totalPower +=
+      coolerName.includes("liquid") || coolerName.includes("aio")
+        ? POWER_ESTIMATES.Cooler.liquid
+        : POWER_ESTIMATES.Cooler.base;
   }
 
   totalPower += POWER_ESTIMATES.Case.fans;
@@ -358,36 +455,88 @@ function checkGeneralCompatibility(build: BuildSlots): CompatibilityIssue[] {
     });
   }
 
+  if (!build.Case) {
+    issues.push({
+      type: "warning",
+      message: "Case is required for a complete build",
+      affectedComponents: [],
+      category: "general",
+    });
+  }
+
+  // Check for builds without dedicated GPU (office builds might be OK)
+  if (!build.GPU && build.CPU) {
+    const cpuName = build.CPU.name?.toLowerCase() || "";
+    const hasIntegratedGraphics =
+      cpuName.includes("apu") ||
+      cpuName.includes("integrated") ||
+      cpuName.includes("uhd") ||
+      cpuName.includes("iris") ||
+      cpuName.includes("vega"); // AMD APUs
+
+    if (!hasIntegratedGraphics) {
+      issues.push({
+        type: "warning",
+        message:
+          "No GPU detected. Ensure CPU has integrated graphics or add a dedicated GPU",
+        affectedComponents: [build.CPU.name || "CPU"],
+        category: "general",
+      });
+    }
+  }
+
   return issues;
 }
 
 /**
- * Estimate power usage for components without explicit wattage
+ * Enhanced power usage estimation for components without explicit wattage
  */
 function estimatePowerUsage(
   type: string,
   component: ComponentResponse
 ): number {
   const name = component.name?.toLowerCase() || "";
+  const price = Number(component.price) || 0;
 
   switch (type) {
     case "CPU":
-      if (name.includes("i9") || name.includes("ryzen 9"))
+      // More comprehensive CPU power estimation
+      if (name.includes("i9") || name.includes("ryzen 9") || price > 400)
         return POWER_ESTIMATES.CPU.extreme;
-      if (name.includes("i7") || name.includes("ryzen 7"))
+      if (name.includes("i7") || name.includes("ryzen 7") || price > 250)
         return POWER_ESTIMATES.CPU.high;
-      return POWER_ESTIMATES.CPU.base;
+      if (name.includes("i5") || name.includes("ryzen 5"))
+        return POWER_ESTIMATES.CPU.base;
+      return POWER_ESTIMATES.CPU.base * 0.8; // Lower-end CPUs
 
     case "GPU":
-      if (name.includes("4090") || name.includes("7900"))
+      // More comprehensive GPU power estimation based on model names and price
+      if (
+        name.includes("4090") ||
+        name.includes("7900 xtx") ||
+        name.includes("3090") ||
+        price > 1000
+      )
         return POWER_ESTIMATES.GPU.extreme;
       if (
         name.includes("4080") ||
-        name.includes("4070") ||
-        name.includes("7800")
+        name.includes("4070 ti") ||
+        name.includes("7800 xt") ||
+        name.includes("3080") ||
+        name.includes("3070 ti") ||
+        price > 500
       )
         return POWER_ESTIMATES.GPU.high;
-      return POWER_ESTIMATES.GPU.base;
+      if (
+        name.includes("4070") ||
+        name.includes("4060 ti") ||
+        name.includes("7700 xt") ||
+        name.includes("3070") ||
+        name.includes("3060 ti") ||
+        price > 300
+      )
+        return POWER_ESTIMATES.GPU.base;
+      return POWER_ESTIMATES.GPU.base * 0.7; // Entry-level GPUs
 
     default:
       return 0;
@@ -395,15 +544,23 @@ function estimatePowerUsage(
 }
 
 /**
- * Check if motherboard and case form factors are compatible
+ * Enhanced form factor compatibility checking
  */
 function isFormFactorCompatible(
   mbFormFactor: string,
   caseFormFactor: string
 ): boolean {
   const compatibility: Record<string, string[]> = {
-    ATX: ["ATX", "Full Tower", "Mid Tower"],
-    "Micro-ATX": ["ATX", "Micro-ATX", "Full Tower", "Mid Tower", "Mini Tower"],
+    "E-ATX": ["Full Tower", "Super Tower"],
+    ATX: ["ATX", "Full Tower", "Mid Tower", "Super Tower"],
+    "Micro-ATX": [
+      "ATX",
+      "Micro-ATX",
+      "Full Tower",
+      "Mid Tower",
+      "Mini Tower",
+      "Super Tower",
+    ],
     "Mini-ITX": [
       "ATX",
       "Micro-ATX",
@@ -412,29 +569,50 @@ function isFormFactorCompatible(
       "Mid Tower",
       "Mini Tower",
       "SFF",
+      "HTPC",
+      "Super Tower",
     ],
+  };
+
+  // Handle case form factors
+  const caseCompatibility: Record<string, string[]> = {
+    "Full Tower": ["E-ATX", "ATX", "Micro-ATX", "Mini-ITX"],
+    "Super Tower": ["E-ATX", "ATX", "Micro-ATX", "Mini-ITX"],
+    "Mid Tower": ["ATX", "Micro-ATX", "Mini-ITX"],
+    "Mini Tower": ["Micro-ATX", "Mini-ITX"],
+    SFF: ["Mini-ITX"],
+    HTPC: ["Mini-ITX"],
   };
 
   return (
     compatibility[mbFormFactor]?.includes(caseFormFactor) ||
-    compatibility[caseFormFactor]?.includes(mbFormFactor) ||
+    caseCompatibility[caseFormFactor]?.includes(mbFormFactor) ||
     mbFormFactor === caseFormFactor
   );
 }
 
 /**
- * Get component suggestions based on current build
+ * Enhanced component suggestions with proper array handling and compatibility testing
  */
 export function getComponentSuggestions(
   build: BuildSlots,
   targetType: keyof BuildSlots,
-  allComponents: ComponentResponse[],
+  allComponents: ComponentResponse[] | { data: ComponentResponse[] },
   priceRange?: { min: number; max: number }
 ): ComponentResponse[] {
-  const suggestions = allComponents
+  // Handle both data structures
+  const components = Array.isArray(allComponents)
+    ? allComponents
+    : allComponents?.data || [];
+
+  const suggestions = components
     .filter((component) => {
       // Filter by component type
       if (component.type !== targetType) return false;
+
+      // Filter by stock availability
+      if (!component.stockQuantity || component.stockQuantity <= 0)
+        return false;
 
       // Filter by price range
       if (priceRange) {
@@ -442,8 +620,23 @@ export function getComponentSuggestions(
         if (price < priceRange.min || price > priceRange.max) return false;
       }
 
-      // Filter by compatibility
-      const testBuild = { ...build, [targetType]: component };
+      // Test compatibility by adding component appropriately
+      const testBuild = { ...build };
+
+      if (
+        targetType === "RAM" ||
+        targetType === "SSD" ||
+        targetType === "HDD"
+      ) {
+        // For arrays, add to existing array or create new one
+        const existingArray =
+          (testBuild[targetType] as ComponentResponse[]) || [];
+        testBuild[targetType] = [...existingArray, component] as any;
+      } else {
+        // For single components
+        testBuild[targetType] = component;
+      }
+
       const compatibility = checkBuildCompatibility(testBuild);
 
       // Only suggest if it doesn't introduce errors
@@ -452,8 +645,66 @@ export function getComponentSuggestions(
       );
     })
     .sort((a, b) => {
-      // Sort by price (ascending)
-      return (Number(a.price) || 0) - (Number(b.price) || 0);
+      // Enhanced sorting algorithm
+      let scoreA = 0;
+      let scoreB = 0;
+
+      // Compatibility with existing components gets higher score
+      if (build.CPU) {
+        // Motherboard socket compatibility
+        if (targetType === "Motherboard" && a.socket === build.CPU.socket)
+          scoreA += 10;
+        if (targetType === "Motherboard" && b.socket === build.CPU.socket)
+          scoreB += 10;
+
+        // RAM compatibility
+        if (targetType === "RAM") {
+          if (build.Motherboard?.ramType === a.ramType) scoreA += 5;
+          if (build.Motherboard?.ramType === b.ramType) scoreB += 5;
+        }
+
+        // Cooler socket compatibility
+        if (targetType === "Cooler") {
+          const socketsA = a.extraCompatibility?.socket_support as unknown;
+          const socketsB = b.extraCompatibility?.socket_support as unknown;
+          if (
+            Array.isArray(socketsA) &&
+            socketsA.includes(build.CPU.socket || "")
+          )
+            scoreA += 8;
+          if (
+            Array.isArray(socketsB) &&
+            socketsB.includes(build.CPU.socket || "")
+          )
+            scoreB += 8;
+        }
+      }
+
+      // Brand matching preferences
+      if (build.CPU && build.CPU.brand) {
+        // Prefer matching CPU/GPU brands for potential optimizations
+        if (targetType === "GPU" || targetType === "Motherboard") {
+          if (a.brand === build.CPU.brand) scoreA += 3;
+          if (b.brand === build.CPU.brand) scoreB += 3;
+        }
+      }
+
+      // Price considerations (prefer mid-range over extremes unless high-end build)
+      const priceA = Number(a.price) || 0;
+      const priceB = Number(b.price) || 0;
+      const targetPrice = priceRange
+        ? (priceRange.min + priceRange.max) / 2
+        : 500;
+
+      // Slight preference for prices closer to target range middle
+      scoreA -= Math.abs(priceA - targetPrice) / 100;
+      scoreB -= Math.abs(priceB - targetPrice) / 100;
+
+      // Final sort: higher score first, then by price ascending
+      if (scoreA !== scoreB) {
+        return scoreB - scoreA;
+      }
+      return priceA - priceB;
     });
 
   return suggestions.slice(0, 5); // Return top 5 suggestions

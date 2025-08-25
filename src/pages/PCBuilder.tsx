@@ -187,7 +187,7 @@ const PCBuilder: React.FC = () => {
 
   // Build management state
   const [selectedBuildId, setSelectedBuildId] = useState<number | null>(null);
-  const [resetKey, setResetKey] = useState(0); // Add reset key for forcing re-render
+  const [resetKey, setResetKey] = useState(0);
 
   // Build state
   const [currentBuild, setCurrentBuild] = useState<BuildSlots>({});
@@ -406,15 +406,8 @@ const PCBuilder: React.FC = () => {
     [components]
   );
 
-  // Save build (create new or update existing)
-  const handleSaveBuild = async () => {
-    console.log("Save build called:", {
-      buildName,
-      selectedUserId,
-      currentBuild,
-      isModifyingExisting,
-    });
-
+  // Save build (create new or update existing) - Modified to allow empty builds
+  const handleSaveBuild = useCallback(async () => {
     if (!buildName.trim()) {
       alert("Please enter a build name");
       return;
@@ -425,16 +418,12 @@ const PCBuilder: React.FC = () => {
       return;
     }
 
-    if (Object.keys(currentBuild).length === 0) {
-      alert("Please add some components to your build first");
-      return;
-    }
+    // Removed the check for empty builds - now allows saving empty builds
 
     try {
       let targetBuildId: number;
 
       if (isModifyingExisting && selectedBuildId) {
-        console.log("Updating existing build:", selectedBuildId);
         // Update existing build
         await updateCartMutation.mutateAsync({
           id: selectedBuildId,
@@ -444,10 +433,6 @@ const PCBuilder: React.FC = () => {
 
         // Clear existing items first
         if (selectedBuildItems?.data) {
-          console.log(
-            "Clearing existing items:",
-            selectedBuildItems.data.length
-          );
           await Promise.all(
             selectedBuildItems.data.map((item) =>
               deleteItemMutation.mutateAsync({ id: item.id! })
@@ -455,7 +440,6 @@ const PCBuilder: React.FC = () => {
           );
         }
       } else {
-        console.log("Creating new build");
         // Create new build
         const newBuildResponse = await createCartMutation.mutateAsync({
           userId: selectedUserId,
@@ -464,10 +448,9 @@ const PCBuilder: React.FC = () => {
         targetBuildId = newBuildResponse.data.id!;
         setSelectedBuildId(targetBuildId);
         setIsModifyingExisting(true);
-        console.log("Created new build with ID:", targetBuildId);
       }
 
-      // Add all components to the build
+      // Add all components to the build (if any exist)
       const addPromises: Promise<unknown>[] = [];
       let componentCount = 0;
 
@@ -499,8 +482,9 @@ const PCBuilder: React.FC = () => {
         }
       });
 
-      console.log(`Adding ${componentCount} components to build`);
-      await Promise.all(addPromises);
+      if (componentCount > 0) {
+        await Promise.all(addPromises);
+      }
 
       // Refresh data
       queryClient.invalidateQueries({
@@ -510,7 +494,11 @@ const PCBuilder: React.FC = () => {
         queryKey: [`/api/v1/items/cart/${targetBuildId}`],
       });
 
-      alert(`Build "${buildName}" saved successfully!`);
+      const buildType =
+        componentCount > 0
+          ? `with ${componentCount} components`
+          : "(empty build)";
+      alert(`Build "${buildName}" saved successfully ${buildType}!`);
     } catch (error: any) {
       console.error("Failed to save build:", error);
       alert(
@@ -519,36 +507,51 @@ const PCBuilder: React.FC = () => {
         }`
       );
     }
-  };
+  }, [
+    buildName,
+    selectedUserId,
+    currentBuild,
+    isModifyingExisting,
+    selectedBuildId,
+    selectedBuildItems,
+    updateCartMutation,
+    createCartMutation,
+    deleteItemMutation,
+    createCartItemMutation,
+    queryClient,
+  ]);
 
   // Delete build
-  const handleDeleteBuild = async (buildId: number, buildName: string) => {
-    const confirmDelete = window.confirm(
-      `Are you sure you want to delete "${buildName}"? This action cannot be undone.`
-    );
-    if (!confirmDelete) return;
+  const handleDeleteBuild = useCallback(
+    async (buildId: number, buildName: string) => {
+      const confirmDelete = window.confirm(
+        `Are you sure you want to delete "${buildName}"? This action cannot be undone.`
+      );
+      if (!confirmDelete) return;
 
-    try {
-      await deleteCartMutation.mutateAsync({ id: buildId });
+      try {
+        await deleteCartMutation.mutateAsync({ id: buildId });
 
-      queryClient.invalidateQueries({
-        queryKey: [`/api/v1/carts/user/${selectedUserId}`],
-      });
+        queryClient.invalidateQueries({
+          queryKey: [`/api/v1/carts/user/${selectedUserId}`],
+        });
 
-      // If we deleted the currently loaded build, clear the builder
-      if (selectedBuildId === buildId) {
-        setSelectedBuildId(null);
-        setCurrentBuild({});
-        setBuildName("");
-        setIsModifyingExisting(false);
+        // If we deleted the currently loaded build, clear the builder
+        if (selectedBuildId === buildId) {
+          setSelectedBuildId(null);
+          setCurrentBuild({});
+          setBuildName("");
+          setIsModifyingExisting(false);
+        }
+
+        alert(`Build "${buildName}" deleted successfully.`);
+      } catch (error: any) {
+        console.error("Failed to delete build:", error);
+        alert("Failed to delete build. Please try again.");
       }
-
-      alert(`Build "${buildName}" deleted successfully.`);
-    } catch (error: any) {
-      console.error("Failed to delete build:", error);
-      alert("Failed to delete build. Please try again.");
-    }
-  };
+    },
+    [deleteCartMutation, queryClient, selectedUserId, selectedBuildId]
+  );
 
   // Add build to shopping cart
   const handleAddToCart = useCallback(async () => {
@@ -641,11 +644,11 @@ const PCBuilder: React.FC = () => {
     setBuildName("");
     setSelectedBuildId(null);
     setIsModifyingExisting(false);
-    setResetKey((prev) => prev + 1); // Force component re-render
+    setResetKey((prev) => prev + 1);
   }, []);
 
   // Create new build
-  const handleNewBuild = () => {
+  const handleNewBuild = useCallback(() => {
     if (Object.keys(currentBuild).length > 0) {
       const confirmClear = window.confirm(
         "Are you sure you want to start a new build? Any unsaved changes will be lost."
@@ -658,8 +661,8 @@ const PCBuilder: React.FC = () => {
     setBuildName("");
     setSelectedBuildId(null);
     setIsModifyingExisting(false);
-    setResetKey((prev) => prev + 1); // Force component re-render
-  };
+    setResetKey((prev) => prev + 1);
+  }, [currentBuild]);
 
   if (!selectedUserId) {
     return (
@@ -789,10 +792,15 @@ const PCBuilder: React.FC = () => {
               type="text"
               value={buildName}
               onChange={(e) => setBuildName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && buildName.trim()) {
+                  handleSaveBuild();
+                }
+              }}
               placeholder={
                 isModifyingExisting
                   ? "Editing existing build..."
-                  : "Enter build name..."
+                  : "Enter build name and press Enter to save..."
               }
               className="w-full p-2 border rounded"
             />
@@ -805,37 +813,37 @@ const PCBuilder: React.FC = () => {
               buildName === "" &&
               Object.keys(currentBuild).length === 0 && (
                 <div className="text-xs text-green-600 mt-1">
-                  🆕 Ready for new build
+                  🆕 Ready for new build - press Enter to save
                 </div>
               )}
           </div>
 
-          {/* Templates */}
+          {/* Templates - Compact dropdown version */}
           <div className="bg-white border rounded-lg p-4 mb-4">
             <h3 className="font-semibold mb-3">Build Templates</h3>
-            <div className="space-y-2">
+            <select
+              onChange={(e) => {
+                if (e.target.value) {
+                  handleApplyTemplate(e.target.value);
+                  e.target.value = "";
+                }
+              }}
+              className="w-full p-2 border rounded text-sm"
+              defaultValue=""
+            >
+              <option value="" disabled>
+                Select a template...
+              </option>
               {BUILD_TEMPLATES.map((template) => (
-                <div key={template.id} className="border rounded p-2">
-                  <div className="flex justify-between items-start mb-1">
-                    <h4 className="font-medium text-sm">{template.name}</h4>
-                    <span className="text-xs bg-gray-100 px-2 py-1 rounded">
-                      {template.category}
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-600 mb-2">
-                    {template.description}
-                  </p>
-                  <div className="text-xs text-gray-500 mb-2">
-                    ${template.targetPrice.min} - ${template.targetPrice.max}
-                  </div>
-                  <button
-                    onClick={() => handleApplyTemplate(template.id)}
-                    className="w-full px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
-                  >
-                    Apply Template
-                  </button>
-                </div>
+                <option key={template.id} value={template.id}>
+                  {template.name} (${template.targetPrice.min}-$
+                  {template.targetPrice.max}) - {template.category}
+                </option>
               ))}
+            </select>
+            <div className="text-xs text-gray-500 mt-2">
+              Templates will auto-select compatible components from your
+              inventory
             </div>
           </div>
 
@@ -918,9 +926,7 @@ const PCBuilder: React.FC = () => {
               </button>
               <button
                 onClick={handleSaveBuild}
-                disabled={
-                  !buildName.trim() || Object.keys(currentBuild).length === 0
-                }
+                disabled={!buildName.trim()}
                 className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
               >
                 {isModifyingExisting ? "Update Build" : "Save Build"}
