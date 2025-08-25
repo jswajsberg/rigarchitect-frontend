@@ -39,7 +39,7 @@ const ComponentCatalog: React.FC = () => {
   const [inStockOnly, setInStockOnly] = useState(false);
 
   // Define component types
-  const componentTypes = [
+  const componentTypes = useMemo(() => [
     { id: "CPU", name: "CPU", description: "Processors and chips" },
     { id: "GPU", name: "GPU", description: "Graphics cards" },
     { id: "RAM", name: "RAM", description: "Memory modules" },
@@ -49,14 +49,14 @@ const ComponentCatalog: React.FC = () => {
     { id: "PSU", name: "PSU", description: "Power supplies" },
     { id: "Case", name: "Case", description: "PC cases" },
     { id: "Cooler", name: "Cooler", description: "CPU coolers" },
-  ];
+  ], []);
 
   // Fetch all components
   const { data: components, isLoading, error, refetch } = useGetAllComponents();
 
   // Fetch components of selected type
   const { data: typeComponents, error: typeError } = useGetComponentsByType(
-    selectedType as any,
+    selectedType as 'CPU' | 'GPU' | 'RAM' | 'SSD' | 'HDD' | 'Motherboard' | 'PSU' | 'Case' | 'Cooler',
     {
       query: { enabled: !!selectedType && !searchTerm && !showAdvancedSearch },
     }
@@ -78,7 +78,7 @@ const ComponentCatalog: React.FC = () => {
     isLoading: isTypeSearchLoading,
     error: typeSearchError,
   } = useGetComponentsByType(
-    searchStrategy?.strategy === "type" ? (searchStrategy.params as any) : null,
+    searchStrategy?.strategy === "type" ? (searchStrategy.params as 'CPU' | 'GPU' | 'RAM' | 'SSD' | 'HDD' | 'Motherboard' | 'PSU' | 'Case' | 'Cooler') : null,
     {
       query: { enabled: searchStrategy?.strategy === "type" },
     }

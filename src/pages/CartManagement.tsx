@@ -109,11 +109,15 @@ const CartManagement = () => {
       queryClient.invalidateQueries({
         queryKey: [`/api/v1/carts/user/${selectedUserId}`],
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to create cart:", error);
       alert(
         `Failed to create cart: ${
-          error.response?.data?.message || error.message
+(error && typeof error === 'object' && 'response' in error &&
+           error.response && typeof error.response === 'object' && 'data' in error.response &&
+           error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data &&
+           typeof error.response.data.message === 'string' ? error.response.data.message :
+           error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' ? error.message : 'Unknown error')
         }`
       );
     }
@@ -144,11 +148,15 @@ const CartManagement = () => {
       queryClient.invalidateQueries({
         queryKey: [`/api/v1/items/cart/${currentCart.id}`],
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to add component:", error);
       alert(
         `Failed to add component: ${
-          error.response?.data?.message || error.message
+(error && typeof error === 'object' && 'response' in error &&
+           error.response && typeof error.response === 'object' && 'data' in error.response &&
+           error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data &&
+           typeof error.response.data.message === 'string' ? error.response.data.message :
+           error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' ? error.message : 'Unknown error')
         }`
       );
     }
@@ -170,11 +178,15 @@ const CartManagement = () => {
       queryClient.invalidateQueries({
         queryKey: [`/api/v1/items/cart/${currentCart?.id}`],
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to update quantity:", error);
       alert(
         `Failed to update quantity: ${
-          error.response?.data?.message || error.message
+(error && typeof error === 'object' && 'response' in error &&
+           error.response && typeof error.response === 'object' && 'data' in error.response &&
+           error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data &&
+           typeof error.response.data.message === 'string' ? error.response.data.message :
+           error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' ? error.message : 'Unknown error')
         }`
       );
     }
@@ -198,11 +210,15 @@ const CartManagement = () => {
       queryClient.invalidateQueries({
         queryKey: [`/api/v1/items/cart/${currentCart?.id}`],
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to remove item:", error);
       alert(
         `Failed to remove item: ${
-          error.response?.data?.message || error.message
+(error && typeof error === 'object' && 'response' in error &&
+           error.response && typeof error.response === 'object' && 'data' in error.response &&
+           error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data &&
+           typeof error.response.data.message === 'string' ? error.response.data.message :
+           error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' ? error.message : 'Unknown error')
         }`
       );
     }
@@ -235,11 +251,15 @@ const CartManagement = () => {
       if (selectedCartId === cartId) {
         selectCart(0);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to delete cart:", error);
       alert(
         `Failed to delete cart: ${
-          error.response?.data?.message || error.message
+(error && typeof error === 'object' && 'response' in error &&
+           error.response && typeof error.response === 'object' && 'data' in error.response &&
+           error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data &&
+           typeof error.response.data.message === 'string' ? error.response.data.message :
+           error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' ? error.message : 'Unknown error')
         }`
       );
     }
@@ -267,11 +287,15 @@ const CartManagement = () => {
       queryClient.invalidateQueries({
         queryKey: ["/api/v1/users"],
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to return cart to active:", error);
       alert(
         `Failed to return cart to active: ${
-          error.response?.data?.message || error.message
+(error && typeof error === 'object' && 'response' in error &&
+           error.response && typeof error.response === 'object' && 'data' in error.response &&
+           error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data &&
+           typeof error.response.data.message === 'string' ? error.response.data.message :
+           error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' ? error.message : 'Unknown error')
         }`
       );
     }

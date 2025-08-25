@@ -13,9 +13,9 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
 
   const tabs = [
     { id: "components", label: "Components", icon: "🔧" },
-    { id: "builds", label: "Build Requests", icon: "🖥️" },
-    { id: "orders", label: "Order History", icon: "📦" },
+    { id: "builder", label: "PC Builder", icon: "🏗️" },
     { id: "cart", label: "Cart Management", icon: "🛒" },
+    { id: "orders", label: "Order History", icon: "📦" },
   ];
 
   const handleLogout = () => {

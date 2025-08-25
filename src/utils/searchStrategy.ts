@@ -9,7 +9,7 @@ import type { SearchFilters } from "../components/SearchBar";
 
 export interface SearchStrategy {
   strategy: "advanced" | "type" | "compatibility" | "general";
-  params: any;
+  params: unknown;
   expandedTerm?: string;
   originalTerm?: string;
 }

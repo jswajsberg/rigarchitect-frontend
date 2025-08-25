@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 // src/contexts/UserContext.tsx - Updated to integrate with AuthContext
 import React, {
   createContext,

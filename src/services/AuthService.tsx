@@ -237,7 +237,9 @@ export const authAPI = {
    * Authenticate user with email/password
    * Future: Replace current email lookup with proper authentication
    */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   login: async (_email: string, _password: string) => {
+    // Parameters are intentionally unused - for future JWT implementation
     // Future implementation:
     // const response = await axios.post('/api/v1/auth/login', {
     //   email: _email,
@@ -252,12 +254,14 @@ export const authAPI = {
    * Register new user account
    * Future: Use proper signup endpoint with password hashing
    */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   signup: async (_userData: {
     name: string;
     email: string;
     password: string;
     budget?: number;
   }) => {
+    // Parameter is intentionally unused - for future JWT implementation
     // Future implementation:
     // const response = await axios.post('/api/v1/auth/signup', _userData);
     // return response.data;

@@ -1,4 +1,4 @@
-// src/App.tsx - Updated with authentication
+// src/App.tsx - Updated with PC Builder
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
@@ -14,7 +14,7 @@ import Navigation from "./components/Navigation";
 import CartManagement from "./pages/CartManagement";
 import ComponentCatalog from "./pages/ComponentCatalog";
 import OrderHistory from "./pages/OrderHistory";
-import BuildRequests from "./pages/BuildRequests";
+import BuildCartBuilder from "./pages/BuildCartBuilder";
 
 // Create a client
 const queryClient = new QueryClient({
@@ -37,10 +37,10 @@ const AppContent = () => {
         return <CartManagement />;
       case "components":
         return <ComponentCatalog />;
+      case "builder":
+        return <BuildCartBuilder />;
       case "orders":
         return <OrderHistory />;
-      case "builds":
-        return <BuildRequests />;
       default:
         return <CartManagement />;
     }

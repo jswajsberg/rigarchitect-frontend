@@ -7,10 +7,19 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
+
+# Build
 dist
 dist-ssr
+.vite
+
+# Local env
 *.local
+.env
+.env.*
+!.env.example
 
 # Editor directories and files
 .vscode/*
@@ -22,3 +31,38 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# --- AI / Assistant Tools ---
+
+# Claude Code
+.claude/
+.claude-code/
+.claude-code.json
+.cc-*
+
+# ChatGPT / Code Interpreter
+.chatgpt/
+.openai/
+.openai-config.json
+
+# Cursor IDE
+.cursor/
+.cursorignore
+.cursor-project.json
+
+# Copilot
+.copilot/
+copilot.*
+github-copilot.*
+
+# Codeium
+.codeium/
+.codeiumignore
+
+# Tabnine
+.tabnine.json
+.tabnine.yaml
+
+# General AI cache/config
+*.ai-cache
+*.ai-config

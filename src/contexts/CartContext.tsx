@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 // src/contexts/CartContext.tsx - Updated to use selected user
 import React, { createContext, useContext, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -152,10 +153,15 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
         `Added ${component.name} to cart (Qty: ${quantity})`,
         "success"
       );
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("🛒 AddToCart error:", error);
-      const errorMsg =
-        error.response?.data?.message || error.message || "Unknown error";
+      const errorMsg = 
+        (error && typeof error === 'object' && 'response' in error && 
+         error.response && typeof error.response === 'object' && 'data' in error.response &&
+         error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data &&
+         typeof error.response.data.message === 'string' ? error.response.data.message :
+         error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' ? error.message : 
+         "Unknown error");
       showToast(`Failed to add to cart: ${errorMsg}`, "error");
     }
   };

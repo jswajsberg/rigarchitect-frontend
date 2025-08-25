@@ -12,7 +12,6 @@
 export type BuildCartResponseStatus = typeof BuildCartResponseStatus[keyof typeof BuildCartResponseStatus];
 
 
-// eslint-disable-next-line @typescript-eslint/no-redeclare
 export const BuildCartResponseStatus = {
   DRAFT: 'DRAFT',
   ACTIVE: 'ACTIVE',

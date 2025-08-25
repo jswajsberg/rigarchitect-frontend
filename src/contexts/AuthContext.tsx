@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 // src/contexts/AuthContext.tsx
 import React, {
   createContext,
@@ -211,11 +212,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       await createUserMutation.mutateAsync({ data: userRequest });
 
       return { success: true };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Signup error:", error);
 
       // Handle specific error cases
-      if (error?.response?.status === 409) {
+      if (error && typeof error === 'object' && 'response' in error && 
+          error.response && typeof error.response === 'object' && 'status' in error.response && 
+          error.response.status === 409) {
         return {
           success: false,
           error: "An account with this email already exists",

@@ -12,7 +12,6 @@
 export type ComponentRequestType = typeof ComponentRequestType[keyof typeof ComponentRequestType];
 
 
-// eslint-disable-next-line @typescript-eslint/no-redeclare
 export const ComponentRequestType = {
   CPU: 'CPU',
   GPU: 'GPU',

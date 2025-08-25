@@ -228,7 +228,7 @@ const OrderCard = ({
       qst: qst,
       total: totalWithTax,
     };
-  }, [order.totalPrice]);
+  }, [order.totalPrice, TAX_RATES.GST, TAX_RATES.QST]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
