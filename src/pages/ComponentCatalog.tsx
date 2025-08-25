@@ -1,4 +1,4 @@
-// src/pages/ComponentCatalog.tsx - Updated with BuildSelectionModal
+// src/pages/ComponentCatalog.tsx - Updated with shopping cart integration
 import React, { useState, useMemo } from "react";
 import type { ComponentResponse } from "../api/model";
 import SearchBar from "../components/SearchBar";
@@ -6,14 +6,16 @@ import ComponentCard from "../components/ComponentCard";
 import QuantityModal from "../modals/QuantityModal";
 import BuildSelectionModal from "../modals/BuildSelectionModal";
 import type { SearchFilters } from "../components/SearchBar";
-import { useCart } from "../contexts/CartContext";
 import { useSelectedUserId } from "../contexts/UserContext";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetAllComponents,
   useGetComponentsByType,
 } from "../api/component-controller/component-controller";
-import { useGetUserCarts } from "../api/build-cart-controller/build-cart-controller";
+import {
+  useGetUserCarts,
+  useCreateCartForUser,
+} from "../api/build-cart-controller/build-cart-controller";
 import { useCreateItem } from "../api/cart-item-controller/cart-item-controller";
 import { determineSearchStrategy } from "../utils/searchStrategy";
 import type { CartItemRequest } from "../api/model";
@@ -22,12 +24,12 @@ const ComponentCatalog: React.FC = () => {
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
-  const { addToCart, showToast, currentCart } = useCart();
   const selectedUserId = useSelectedUserId();
   const queryClient = useQueryClient();
   const createItemMutation = useCreateItem();
+  const createCartMutation = useCreateCartForUser();
 
-  // Fetch user's builds for the build selection modal
+  // Fetch user's carts for build selection and shopping cart
   const { data: userCarts, isLoading: buildsLoading } = useGetUserCarts(
     selectedUserId || 0,
     {
@@ -35,7 +37,7 @@ const ComponentCatalog: React.FC = () => {
     }
   );
 
-  // Modal state for quantity selection (checkout cart)
+  // Modal state for quantity selection (shopping cart)
   const [quantityModal, setQuantityModal] = useState<{
     isOpen: boolean;
     component: ComponentResponse | null;
@@ -111,6 +113,58 @@ const ComponentCatalog: React.FC = () => {
     }
   );
 
+  // Get user's shopping cart (DRAFT status) and builds (ACTIVE status)
+  const shoppingCart = useMemo(
+    () => userCarts?.data?.find((cart) => cart.status === "DRAFT") || null,
+    [userCarts]
+  );
+
+  const availableBuilds = useMemo(
+    () => userCarts?.data?.filter((cart) => cart.status === "ACTIVE") || [],
+    [userCarts]
+  );
+
+  // Utility function to show toast messages
+  const showToast = (
+    message: string,
+    type: "success" | "error" | "info" = "info"
+  ) => {
+    // Simple alert for now - could be replaced with actual toast system later
+    if (type === "error") {
+      alert(`Error: ${message}`);
+    } else {
+      alert(message);
+    }
+  };
+
+  // Auto-create shopping cart if it doesn't exist
+  const ensureShoppingCart = async () => {
+    if (shoppingCart || !selectedUserId) return shoppingCart;
+
+    try {
+      const newCartResponse = await createCartMutation.mutateAsync({
+        userId: selectedUserId,
+        data: { name: "Shopping Cart", status: "DRAFT" },
+      });
+
+      // Invalidate queries to refresh cart data
+      queryClient.invalidateQueries({
+        queryKey: [`/api/v1/carts/user/${selectedUserId}`],
+      });
+
+      return newCartResponse.data;
+    } catch (error: any) {
+      console.error("Failed to create shopping cart:", error);
+      showToast(
+        `Failed to create shopping cart: ${
+          error.response?.data?.message || error.message
+        }`,
+        "error"
+      );
+      return null;
+    }
+  };
+
   const getComponentCount = (type: string): number => {
     if (!components?.data || !Array.isArray(components.data)) return 0;
     return components.data.filter((c: ComponentResponse) => c.type === type)
@@ -152,26 +206,28 @@ const ComponentCatalog: React.FC = () => {
     }
   };
 
-  // Cart handlers - Updated to use BuildSelectionModal for "Add to Build"
+  // Cart handlers - Updated for new shopping cart system
   const handleAddToBuildCart = async (component: ComponentResponse) => {
     if (!selectedUserId) {
       showToast("Please select a user first!", "error");
       return;
     }
 
-    // Open the build selection modal instead of quantity modal
+    // Open the build selection modal
     setBuildSelectionModal({
       isOpen: true,
       component,
     });
   };
 
+  // Updated: Add directly to shopping cart (DRAFT BuildCart)
   const handleAddToCheckoutCart = async (component: ComponentResponse) => {
-    if (!currentCart) {
-      showToast("Please select a cart in Cart Management first!", "error");
+    if (!selectedUserId) {
+      showToast("Please select a user first!", "error");
       return;
     }
 
+    // Open quantity modal for shopping cart
     setQuantityModal({
       isOpen: true,
       component,
@@ -192,7 +248,6 @@ const ComponentCatalog: React.FC = () => {
     const component = buildSelectionModal.component;
     let successCount = 0;
     let failCount = 0;
-    const errors: string[] = [];
 
     // Add component to each selected build
     for (const buildId of selectedBuildIds) {
@@ -207,9 +262,6 @@ const ComponentCatalog: React.FC = () => {
         successCount++;
       } catch (error: any) {
         failCount++;
-        const errorMsg =
-          error.response?.data?.message || error.message || "Unknown error";
-        errors.push(`Build #${buildId}: ${errorMsg}`);
         console.error(`Failed to add component to build ${buildId}:`, error);
       }
     }
@@ -225,7 +277,7 @@ const ComponentCatalog: React.FC = () => {
       });
     });
 
-    // Show appropriate toast message
+    // Show results
     if (successCount > 0 && failCount === 0) {
       showToast(
         `Added ${component.name} to ${successCount} build${
@@ -237,25 +289,55 @@ const ComponentCatalog: React.FC = () => {
       showToast(
         `Added to ${successCount} build${
           successCount !== 1 ? "s" : ""
-        }, failed for ${failCount}. Check console for details.`,
+        }, failed for ${failCount}`,
         "error"
       );
-      console.error("Build addition errors:", errors);
     } else {
       showToast(`Failed to add component to any builds`, "error");
-      console.error("All build additions failed:", errors);
     }
   };
 
+  // Handle quantity confirmation (for shopping cart)
   const handleQuantityConfirm = async (quantity: number) => {
-    if (!quantityModal.component) return;
+    if (!quantityModal.component || !selectedUserId) return;
 
-    await addToCart(quantityModal.component, quantity);
+    const component = quantityModal.component;
 
-    if (quantityModal.actionType === "buy") {
+    try {
+      // Ensure shopping cart exists
+      let targetCart = shoppingCart;
+      if (!targetCart) {
+        targetCart = await ensureShoppingCart();
+        if (!targetCart) return; // Failed to create cart
+      }
+
+      const cartItemRequest: CartItemRequest = {
+        cartId: targetCart.id!,
+        componentId: component.id!,
+        quantity,
+      };
+
+      await createItemMutation.mutateAsync({ data: cartItemRequest });
+
+      // Refresh cart data
+      queryClient.invalidateQueries({
+        queryKey: [`/api/v1/carts/user/${selectedUserId}`],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/v1/items/cart/${targetCart.id}`],
+      });
+
       showToast(
-        `${quantityModal.component.name} added! Go to Cart tab to checkout.`,
-        "info"
+        `${component.name} added to shopping cart! Go to Shopping Cart to checkout.`,
+        "success"
+      );
+    } catch (error: any) {
+      console.error("Failed to add component to shopping cart:", error);
+      showToast(
+        `Failed to add component: ${
+          error.response?.data?.message || error.message
+        }`,
+        "error"
       );
     }
   };
@@ -427,17 +509,14 @@ const ComponentCatalog: React.FC = () => {
     isLoading || (searchStrategy?.strategy === "type" && isTypeSearchLoading);
   const searchError = error || typeError || typeSearchError;
 
-  // Get active builds for the build selection modal
-  const availableBuilds =
-    userCarts?.data?.filter((cart) => cart.status === "ACTIVE") || [];
-
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Component Catalog</h1>
         <p className="text-gray-600 mt-2">
-          Browse and search for PC components to add to your builds
+          Browse and search for PC components to add to your builds or shopping
+          cart
         </p>
       </div>
 
@@ -567,7 +646,7 @@ const ComponentCatalog: React.FC = () => {
       </div>
 
       {/* Modals */}
-      {/* Quantity Modal for Checkout Cart */}
+      {/* Quantity Modal for Shopping Cart */}
       <QuantityModal
         isOpen={quantityModal.isOpen}
         onClose={closeQuantityModal}

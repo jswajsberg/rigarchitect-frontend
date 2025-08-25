@@ -1,4 +1,4 @@
-// src/App.tsx - Updated with PC Builder
+// src/App.tsx - Updated with BuildManagement routing
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
@@ -11,10 +11,10 @@ import {
 } from "./contexts/NavigationContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Navigation from "./components/Navigation";
-import CartManagement from "./pages/CartManagement";
+import ShoppingCart from "./pages/ShoppingCart";
 import ComponentCatalog from "./pages/ComponentCatalog";
 import OrderHistory from "./pages/OrderHistory";
-import BuildCartBuilder from "./pages/BuildCartBuilder";
+import PCBuilder from "./pages/PCBuilder";
 
 // Create a client
 const queryClient = new QueryClient({
@@ -34,15 +34,15 @@ const AppContent = () => {
   const renderContent = () => {
     switch (activeTab) {
       case "cart":
-        return <CartManagement />;
+        return <ShoppingCart />;
       case "components":
         return <ComponentCatalog />;
-      case "builder":
-        return <BuildCartBuilder />;
       case "orders":
         return <OrderHistory />;
+      case "builds":
+        return <PCBuilder />;
       default:
-        return <CartManagement />;
+        return <ShoppingCart />;
     }
   };
 
