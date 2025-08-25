@@ -1,3 +1,4 @@
+// src/pages/CartManagement.tsx - Updated without cart naming functionality
 import { useState, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCart } from "../contexts/CartContext";
@@ -22,8 +23,6 @@ const CartManagement = () => {
   const queryClient = useQueryClient();
   const selectedUserId = useSelectedUserId();
   const { selectCart, selectedCartId } = useCart();
-  const [isCreatingCart, setIsCreatingCart] = useState(false);
-  const [newCartName, setNewCartName] = useState("");
   const [addComponentId, setAddComponentId] = useState("");
   const [addQuantity, setAddQuantity] = useState(1);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
@@ -93,31 +92,24 @@ const CartManagement = () => {
   };
 
   const handleCreateCart = async () => {
-    if (!newCartName.trim() || !selectedUserId) return;
+    if (!selectedUserId) return;
 
     try {
       const newCartResponse = await createCartMutation.mutateAsync({
         userId: selectedUserId,
-        data: { name: newCartName, status: "ACTIVE" },
+        data: { name: "Build Cart", status: "ACTIVE" }, // Use generic name
       });
-
-      setNewCartName("");
-      setIsCreatingCart(false);
 
       selectCart(newCartResponse.data.id!);
 
       queryClient.invalidateQueries({
         queryKey: [`/api/v1/carts/user/${selectedUserId}`],
       });
-    } catch (error: unknown) {
+    } catch (error: any) {
       console.error("Failed to create cart:", error);
       alert(
         `Failed to create cart: ${
-(error && typeof error === 'object' && 'response' in error &&
-           error.response && typeof error.response === 'object' && 'data' in error.response &&
-           error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data &&
-           typeof error.response.data.message === 'string' ? error.response.data.message :
-           error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' ? error.message : 'Unknown error')
+          error.response?.data?.message || error.message
         }`
       );
     }
@@ -148,15 +140,11 @@ const CartManagement = () => {
       queryClient.invalidateQueries({
         queryKey: [`/api/v1/items/cart/${currentCart.id}`],
       });
-    } catch (error: unknown) {
+    } catch (error: any) {
       console.error("Failed to add component:", error);
       alert(
         `Failed to add component: ${
-(error && typeof error === 'object' && 'response' in error &&
-           error.response && typeof error.response === 'object' && 'data' in error.response &&
-           error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data &&
-           typeof error.response.data.message === 'string' ? error.response.data.message :
-           error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' ? error.message : 'Unknown error')
+          error.response?.data?.message || error.message
         }`
       );
     }
@@ -178,15 +166,11 @@ const CartManagement = () => {
       queryClient.invalidateQueries({
         queryKey: [`/api/v1/items/cart/${currentCart?.id}`],
       });
-    } catch (error: unknown) {
+    } catch (error: any) {
       console.error("Failed to update quantity:", error);
       alert(
         `Failed to update quantity: ${
-(error && typeof error === 'object' && 'response' in error &&
-           error.response && typeof error.response === 'object' && 'data' in error.response &&
-           error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data &&
-           typeof error.response.data.message === 'string' ? error.response.data.message :
-           error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' ? error.message : 'Unknown error')
+          error.response?.data?.message || error.message
         }`
       );
     }
@@ -210,15 +194,11 @@ const CartManagement = () => {
       queryClient.invalidateQueries({
         queryKey: [`/api/v1/items/cart/${currentCart?.id}`],
       });
-    } catch (error: unknown) {
+    } catch (error: any) {
       console.error("Failed to remove item:", error);
       alert(
         `Failed to remove item: ${
-(error && typeof error === 'object' && 'response' in error &&
-           error.response && typeof error.response === 'object' && 'data' in error.response &&
-           error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data &&
-           typeof error.response.data.message === 'string' ? error.response.data.message :
-           error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' ? error.message : 'Unknown error')
+          error.response?.data?.message || error.message
         }`
       );
     }
@@ -231,11 +211,11 @@ const CartManagement = () => {
     setShowCheckoutModal(true);
   };
 
-  const handleDeleteCart = async (cartId: number, cartName: string) => {
+  const handleDeleteCart = async (cartId: number) => {
     if (!selectedUserId) return;
 
     const confirmDelete = window.confirm(
-      `Are you sure you want to permanently delete "${cartName}"? This action cannot be undone.`
+      `Are you sure you want to permanently delete this cart? This action cannot be undone.`
     );
     if (!confirmDelete) return;
 
@@ -251,32 +231,28 @@ const CartManagement = () => {
       if (selectedCartId === cartId) {
         selectCart(0);
       }
-    } catch (error: unknown) {
+    } catch (error: any) {
       console.error("Failed to delete cart:", error);
       alert(
         `Failed to delete cart: ${
-(error && typeof error === 'object' && 'response' in error &&
-           error.response && typeof error.response === 'object' && 'data' in error.response &&
-           error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data &&
-           typeof error.response.data.message === 'string' ? error.response.data.message :
-           error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' ? error.message : 'Unknown error')
+          error.response?.data?.message || error.message
         }`
       );
     }
   };
 
-  const handleReturnToDraft = async (cartId: number, cartName: string) => {
+  const handleReturnToDraft = async (cartId: number) => {
     if (!selectedUserId) return;
 
     const confirmReturn = window.confirm(
-      `Are you sure you want to return "${cartName}" to active status? This will make it editable again.`
+      `Are you sure you want to return this cart to active status? This will make it editable again.`
     );
     if (!confirmReturn) return;
 
     try {
       await updateCartMutation.mutateAsync({
         id: cartId,
-        data: { name: cartName, status: "ACTIVE" },
+        data: { name: "Build Cart", status: "ACTIVE" }, // Use generic name
       });
 
       // Refresh cart data
@@ -287,15 +263,11 @@ const CartManagement = () => {
       queryClient.invalidateQueries({
         queryKey: ["/api/v1/users"],
       });
-    } catch (error: unknown) {
+    } catch (error: any) {
       console.error("Failed to return cart to active:", error);
       alert(
         `Failed to return cart to active: ${
-(error && typeof error === 'object' && 'response' in error &&
-           error.response && typeof error.response === 'object' && 'data' in error.response &&
-           error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data &&
-           typeof error.response.data.message === 'string' ? error.response.data.message :
-           error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' ? error.message : 'Unknown error')
+          error.response?.data?.message || error.message
         }`
       );
     }
@@ -336,7 +308,7 @@ const CartManagement = () => {
         <label className="text-sm font-medium text-gray-700">
           Active Carts:
         </label>
-        {activeCarts.map((cart) => (
+        {activeCarts.map((cart, index) => (
           <button
             key={cart.id}
             onClick={() => handleCartSelection(cart.id!)}
@@ -346,49 +318,17 @@ const CartManagement = () => {
                 : "bg-gray-200 text-gray-700 hover:bg-gray-300"
             }`}
           >
-            {cart.name} (${cart.totalPrice?.toFixed(2) || "0.00"})
+            Cart {index + 1} (${cart.totalPrice?.toFixed(2) || "0.00"})
           </button>
         ))}
 
         <button
-          onClick={() => setIsCreatingCart(true)}
+          onClick={handleCreateCart}
           className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
         >
           + New Cart
         </button>
       </div>
-
-      {/* Create Cart Form */}
-      {isCreatingCart && (
-        <div className="mb-6 bg-white p-4 rounded-lg shadow border">
-          <h3 className="text-lg font-semibold mb-3">Create New Cart</h3>
-          <div className="flex gap-3">
-            <input
-              type="text"
-              value={newCartName}
-              onChange={(e) => setNewCartName(e.target.value)}
-              placeholder="Enter cart name..."
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <button
-              onClick={handleCreateCart}
-              disabled={!newCartName.trim()}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
-            >
-              Create
-            </button>
-            <button
-              onClick={() => {
-                setIsCreatingCart(false);
-                setNewCartName("");
-              }}
-              className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Main Content Area - Dual Column Layout */}
       {activeCarts.length === 0 ? (
@@ -400,7 +340,7 @@ const CartManagement = () => {
             Create your first cart to start building!
           </p>
           <button
-            onClick={() => setIsCreatingCart(true)}
+            onClick={handleCreateCart}
             className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
           >
             Create Your First Cart
@@ -414,7 +354,10 @@ const CartManagement = () => {
               <div className="p-6 border-b border-gray-200">
                 <div className="flex justify-between items-center">
                   <h3 className="text-xl font-semibold">
-                    {currentCart?.name || "No Cart Selected"}
+                    Cart{" "}
+                    {activeCarts.findIndex(
+                      (cart) => cart.id === currentCart?.id
+                    ) + 1 || "No Cart Selected"}
                   </h3>
                   {currentCart && (
                     <div className="text-2xl font-bold text-blue-600">
@@ -431,85 +374,100 @@ const CartManagement = () => {
 
               <div className="p-6">
                 {cartItems.length === 0 ? (
-                  <div className="text-center py-12">
-                    <div className="text-gray-400 text-6xl mb-4">🛒</div>
-                    <h4 className="text-lg font-medium text-gray-600 mb-2">
-                      Cart is Empty
-                    </h4>
-                    <p className="text-gray-500">
-                      Add components to get started with your build
+                  <div className="text-center py-8 text-gray-500">
+                    <div className="text-4xl mb-4">🛒</div>
+                    <p>This cart is empty.</p>
+                    <p className="text-sm mt-2">
+                      Add components using the sidebar or browse the component
+                      catalog.
                     </p>
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {cartItems.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
-                      >
-                        <div className="flex-1">
-                          <h4 className="font-semibold">
-                            {item.componentName}
-                          </h4>
-                          <p className="text-sm text-gray-600">
-                            Component ID: {item.componentId}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            Quantity: {item.quantity || 0}
-                          </p>
-                        </div>
+                    {cartItems.map((item) => {
+                      const component = allComponents?.data?.find(
+                        (c: ComponentResponse) => c.id === item.componentId
+                      );
 
-                        <div className="flex items-center gap-3">
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() =>
-                                handleUpdateQuantity(
-                                  item.id!,
-                                  (item.quantity || 1) - 1
-                                )
-                              }
-                              disabled={(item.quantity || 0) <= 1}
-                              className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center hover:bg-gray-300 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                            >
-                              -
-                            </button>
-                            <span className="w-8 text-center font-medium">
-                              {item.quantity || 0}
-                            </span>
-                            <button
-                              onClick={() =>
-                                handleUpdateQuantity(
-                                  item.id!,
-                                  (item.quantity || 1) + 1
-                                )
-                              }
-                              className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center hover:bg-gray-300"
-                            >
-                              +
-                            </button>
+                      return (
+                        <div
+                          key={item.id}
+                          className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
+                        >
+                          <div className="flex-1">
+                            <h4 className="font-medium text-gray-900">
+                              {component?.name ||
+                                `Component ID: ${item.componentId}`}
+                            </h4>
+                            <div className="text-sm text-gray-600">
+                              {component?.brand} • {component?.type}
+                            </div>
+                            <div className="text-lg font-semibold text-green-600">
+                              ${component?.price?.toFixed(2)} each
+                            </div>
                           </div>
 
-                          <button
-                            onClick={() => handleRemoveItem(item.id!)}
-                            className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-sm"
-                            title="Remove this item completely"
-                          >
-                            Remove
-                          </button>
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() =>
+                                  handleUpdateQuantity(
+                                    item.id!,
+                                    Math.max(1, (item.quantity || 1) - 1)
+                                  )
+                                }
+                                disabled={item.quantity === 1}
+                                className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center hover:bg-gray-300 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                              >
+                                -
+                              </button>
+                              <span className="w-12 text-center font-medium">
+                                {item.quantity}
+                              </span>
+                              <button
+                                onClick={() =>
+                                  handleUpdateQuantity(
+                                    item.id!,
+                                    (item.quantity || 1) + 1
+                                  )
+                                }
+                                className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center hover:bg-gray-300"
+                              >
+                                +
+                              </button>
+                            </div>
+
+                            <div className="text-right">
+                              <div className="font-bold text-gray-900">
+                                $
+                                {(
+                                  (component?.price || 0) * (item.quantity || 1)
+                                ).toFixed(2)}
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={() => handleRemoveItem(item.id!)}
+                              className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-sm"
+                              title="Remove this item completely"
+                            >
+                              Remove
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Sidebar - Add Components & Actions - Takes 1 column */}
+          {/* Sidebar - Quick Add & Actions - Takes 1 column */}
           <div className="space-y-6">
-            {/* Add Component Card */}
+            {/* Quick Add Component Card */}
             <div className="bg-white rounded-lg shadow-md p-6">
-              <h3 className="text-lg font-semibold mb-4">Add Component</h3>
+              <h3 className="text-lg font-semibold mb-4">Quick Add</h3>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -547,53 +505,32 @@ const CartManagement = () => {
                 </div>
                 <button
                   onClick={handleAddComponent}
-                  disabled={!addComponentId}
-                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 font-medium"
+                  disabled={!addComponentId || !currentCart}
+                  className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
                   Add to Cart
                 </button>
               </div>
             </div>
 
-            {/* Cart Actions Card */}
+            {/* Cart Actions */}
             {currentCart && (
               <div className="bg-white rounded-lg shadow-md p-6">
                 <h3 className="text-lg font-semibold mb-4">Cart Actions</h3>
                 <div className="space-y-3">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-600 mb-1">
-                      ${currentCart.totalPrice?.toFixed(2) || "0.00"}
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      {cartItems.length} item{cartItems.length !== 1 ? "s" : ""}{" "}
-                      in cart
-                    </div>
-                  </div>
-
                   <button
                     onClick={handleFinalizeCart}
                     disabled={cartItems.length === 0}
-                    className="w-full bg-green-600 text-white p-3 rounded-lg hover:bg-green-700 disabled:bg-gray-400 font-medium"
+                    className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
                   >
-                    Finalize & Checkout
+                    Checkout Cart
                   </button>
-
                   <button
-                    onClick={() =>
-                      handleDeleteCart(
-                        currentCart.id!,
-                        currentCart.name || "Unnamed Cart"
-                      )
-                    }
-                    className="w-full bg-red-600 text-white p-3 rounded-lg hover:bg-red-700 font-medium"
+                    onClick={() => handleDeleteCart(currentCart.id!)}
+                    className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
                   >
                     Delete Cart
                   </button>
-
-                  <p className="text-xs text-gray-500 text-center">
-                    Finalizing will show detailed tax breakdown and deduct the
-                    total from your budget.
-                  </p>
                 </div>
               </div>
             )}
@@ -601,81 +538,78 @@ const CartManagement = () => {
         </div>
       )}
 
-      {/* Finalized Carts Management Section */}
+      {/* Finalized Carts Section */}
       {finalizedCarts.length > 0 && (
-        <div className="mt-8">
-          <div className="mb-4">
-            <h3 className="text-xl font-bold text-gray-900">
-              Finalized Builds
-            </h3>
-            <p className="text-gray-600">
-              Manage your completed builds - delete or return to active status
-            </p>
-          </div>
-
-          <div className="bg-white rounded-lg shadow border">
-            <div className="p-6">
-              <div className="space-y-3">
-                {finalizedCarts.map((cart) => (
-                  <div
-                    key={cart.id}
-                    className="flex justify-between items-center p-4 bg-gray-50 rounded-lg border"
-                  >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3">
-                        <h4 className="font-semibold text-gray-900">
-                          {cart.name}
-                        </h4>
-                        <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full font-medium">
-                          FINALIZED
+        <div className="mt-12">
+          <h3 className="text-2xl font-bold text-gray-900 mb-6">
+            Completed Orders
+          </h3>
+          <div className="bg-white rounded-lg shadow-md overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Cart
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Total
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Finalized
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {finalizedCarts.map((cart, index) => (
+                    <tr key={cart.id}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        Cart {index + 1}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                          {cart.status}
                         </span>
-                      </div>
-                      <p className="text-sm text-gray-600 mt-1">
-                        Total Cost: ${cart.totalPrice?.toFixed(2) || "0.00"}
-                      </p>
-                      {cart.finalizedAt && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          Finalized:{" "}
-                          {new Date(cart.finalizedAt).toLocaleDateString()}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() =>
-                          handleReturnToDraft(
-                            cart.id!,
-                            cart.name || "Unnamed Cart"
-                          )
-                        }
-                        className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-medium"
-                        title="Return to active status for editing"
-                      >
-                        Return to Active
-                      </button>
-                      <button
-                        onClick={() =>
-                          handleDeleteCart(
-                            cart.id!,
-                            cart.name || "Unnamed Cart"
-                          )
-                        }
-                        className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm font-medium"
-                        title="Permanently delete this build"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">
+                        ${cart.totalPrice?.toFixed(2) || "0.00"}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {cart.finalizedAt
+                          ? new Date(cart.finalizedAt).toLocaleDateString()
+                          : "N/A"}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <button
+                          onClick={() => handleReturnToDraft(cart.id!)}
+                          className="text-blue-600 hover:text-blue-900 mr-4"
+                        >
+                          Return to Active
+                        </button>
+                        <button
+                          onClick={() => handleDeleteCart(cart.id!)}
+                          className="text-red-600 hover:text-red-900"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
       )}
 
       {/* Checkout Modal */}
-      {currentCart && (
+      {showCheckoutModal && currentCart && (
         <CheckoutModal
           isOpen={showCheckoutModal}
           onClose={() => setShowCheckoutModal(false)}

@@ -1,23 +1,41 @@
+// src/pages/ComponentCatalog.tsx - Updated with BuildSelectionModal
 import React, { useState, useMemo } from "react";
 import type { ComponentResponse } from "../api/model";
 import SearchBar from "../components/SearchBar";
 import ComponentCard from "../components/ComponentCard";
 import QuantityModal from "../modals/QuantityModal";
+import BuildSelectionModal from "../modals/BuildSelectionModal";
 import type { SearchFilters } from "../components/SearchBar";
 import { useCart } from "../contexts/CartContext";
+import { useSelectedUserId } from "../contexts/UserContext";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetAllComponents,
   useGetComponentsByType,
 } from "../api/component-controller/component-controller";
+import { useGetUserCarts } from "../api/build-cart-controller/build-cart-controller";
+import { useCreateItem } from "../api/cart-item-controller/cart-item-controller";
 import { determineSearchStrategy } from "../utils/searchStrategy";
+import type { CartItemRequest } from "../api/model";
 
 const ComponentCatalog: React.FC = () => {
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
   const { addToCart, showToast, currentCart } = useCart();
+  const selectedUserId = useSelectedUserId();
+  const queryClient = useQueryClient();
+  const createItemMutation = useCreateItem();
 
-  // Modal state for quantity selection
+  // Fetch user's builds for the build selection modal
+  const { data: userCarts, isLoading: buildsLoading } = useGetUserCarts(
+    selectedUserId || 0,
+    {
+      query: { enabled: !!selectedUserId },
+    }
+  );
+
+  // Modal state for quantity selection (checkout cart)
   const [quantityModal, setQuantityModal] = useState<{
     isOpen: boolean;
     component: ComponentResponse | null;
@@ -26,6 +44,15 @@ const ComponentCatalog: React.FC = () => {
     isOpen: false,
     component: null,
     actionType: "build",
+  });
+
+  // Modal state for build selection (add to builds)
+  const [buildSelectionModal, setBuildSelectionModal] = useState<{
+    isOpen: boolean;
+    component: ComponentResponse | null;
+  }>({
+    isOpen: false,
+    component: null,
   });
 
   // Advanced search filters
@@ -39,7 +66,7 @@ const ComponentCatalog: React.FC = () => {
   const [inStockOnly, setInStockOnly] = useState(false);
 
   // Define component types
-  const componentTypes = useMemo(() => [
+  const componentTypes = [
     { id: "CPU", name: "CPU", description: "Processors and chips" },
     { id: "GPU", name: "GPU", description: "Graphics cards" },
     { id: "RAM", name: "RAM", description: "Memory modules" },
@@ -49,14 +76,14 @@ const ComponentCatalog: React.FC = () => {
     { id: "PSU", name: "PSU", description: "Power supplies" },
     { id: "Case", name: "Case", description: "PC cases" },
     { id: "Cooler", name: "Cooler", description: "CPU coolers" },
-  ], []);
+  ];
 
   // Fetch all components
   const { data: components, isLoading, error, refetch } = useGetAllComponents();
 
   // Fetch components of selected type
   const { data: typeComponents, error: typeError } = useGetComponentsByType(
-    selectedType as 'CPU' | 'GPU' | 'RAM' | 'SSD' | 'HDD' | 'Motherboard' | 'PSU' | 'Case' | 'Cooler',
+    selectedType as any,
     {
       query: { enabled: !!selectedType && !searchTerm && !showAdvancedSearch },
     }
@@ -78,7 +105,7 @@ const ComponentCatalog: React.FC = () => {
     isLoading: isTypeSearchLoading,
     error: typeSearchError,
   } = useGetComponentsByType(
-    searchStrategy?.strategy === "type" ? (searchStrategy.params as 'CPU' | 'GPU' | 'RAM' | 'SSD' | 'HDD' | 'Motherboard' | 'PSU' | 'Case' | 'Cooler') : null,
+    searchStrategy?.strategy === "type" ? (searchStrategy.params as any) : null,
     {
       query: { enabled: searchStrategy?.strategy === "type" },
     }
@@ -125,17 +152,17 @@ const ComponentCatalog: React.FC = () => {
     }
   };
 
-  // Cart handlers
+  // Cart handlers - Updated to use BuildSelectionModal for "Add to Build"
   const handleAddToBuildCart = async (component: ComponentResponse) => {
-    if (!currentCart) {
-      showToast("Please select a cart in Cart Management first!", "error");
+    if (!selectedUserId) {
+      showToast("Please select a user first!", "error");
       return;
     }
 
-    setQuantityModal({
+    // Open the build selection modal instead of quantity modal
+    setBuildSelectionModal({
       isOpen: true,
       component,
-      actionType: "build",
     });
   };
 
@@ -152,6 +179,74 @@ const ComponentCatalog: React.FC = () => {
     });
   };
 
+  // Handle adding component to multiple builds
+  const handleBuildSelectionConfirm = async (
+    selectedBuildIds: number[],
+    quantity: number
+  ) => {
+    if (!buildSelectionModal.component || !selectedUserId) {
+      showToast("Error: Missing component or user selection", "error");
+      return;
+    }
+
+    const component = buildSelectionModal.component;
+    let successCount = 0;
+    let failCount = 0;
+    const errors: string[] = [];
+
+    // Add component to each selected build
+    for (const buildId of selectedBuildIds) {
+      try {
+        const cartItemRequest: CartItemRequest = {
+          cartId: buildId,
+          componentId: component.id!,
+          quantity,
+        };
+
+        await createItemMutation.mutateAsync({ data: cartItemRequest });
+        successCount++;
+      } catch (error: any) {
+        failCount++;
+        const errorMsg =
+          error.response?.data?.message || error.message || "Unknown error";
+        errors.push(`Build #${buildId}: ${errorMsg}`);
+        console.error(`Failed to add component to build ${buildId}:`, error);
+      }
+    }
+
+    // Invalidate relevant queries to refresh the UI
+    queryClient.invalidateQueries({
+      queryKey: [`/api/v1/carts/user/${selectedUserId}`],
+    });
+
+    selectedBuildIds.forEach((buildId) => {
+      queryClient.invalidateQueries({
+        queryKey: [`/api/v1/items/cart/${buildId}`],
+      });
+    });
+
+    // Show appropriate toast message
+    if (successCount > 0 && failCount === 0) {
+      showToast(
+        `Added ${component.name} to ${successCount} build${
+          successCount !== 1 ? "s" : ""
+        } (Qty: ${quantity} each)`,
+        "success"
+      );
+    } else if (successCount > 0 && failCount > 0) {
+      showToast(
+        `Added to ${successCount} build${
+          successCount !== 1 ? "s" : ""
+        }, failed for ${failCount}. Check console for details.`,
+        "error"
+      );
+      console.error("Build addition errors:", errors);
+    } else {
+      showToast(`Failed to add component to any builds`, "error");
+      console.error("All build additions failed:", errors);
+    }
+  };
+
   const handleQuantityConfirm = async (quantity: number) => {
     if (!quantityModal.component) return;
 
@@ -165,11 +260,18 @@ const ComponentCatalog: React.FC = () => {
     }
   };
 
-  const closeModal = () => {
+  const closeQuantityModal = () => {
     setQuantityModal({
       isOpen: false,
       component: null,
       actionType: "build",
+    });
+  };
+
+  const closeBuildSelectionModal = () => {
+    setBuildSelectionModal({
+      isOpen: false,
+      component: null,
     });
   };
 
@@ -197,242 +299,150 @@ const ComponentCatalog: React.FC = () => {
         case "advanced":
           results = components?.data || [];
 
-          if (searchStrategy.params.type) {
+          if ((searchStrategy.params as any).type) {
             results = results.filter(
-              (c: ComponentResponse) => c.type === searchStrategy.params.type
+              (c: ComponentResponse) =>
+                c.type === (searchStrategy.params as any).type
             );
           }
 
-          if (searchStrategy.params.brand) {
+          if ((searchStrategy.params as any).brand) {
             results = results.filter((c: ComponentResponse) =>
               c.brand
                 ?.toLowerCase()
-                .includes(searchStrategy.params.brand.toLowerCase())
+                .includes((searchStrategy.params as any).brand.toLowerCase())
             );
           }
 
-          if (searchStrategy.params.compatibilityTag) {
+          if ((searchStrategy.params as any).compatibilityTag) {
             results = results.filter((c: ComponentResponse) => {
-              const searchTag =
-                searchStrategy.params.compatibilityTag.toLowerCase();
-
-              const tagMatch = c.compatibilityTag
-                ?.toLowerCase()
-                .includes(searchTag);
-              const socketMatch = c.socket?.toLowerCase().includes(searchTag);
-              const ramMatch = c.ramType?.toLowerCase().includes(searchTag);
-              const formFactorMatch = c.formFactor
-                ?.toLowerCase()
-                .includes(searchTag);
-              const psuFormFactorMatch = c.psuFormFactor
-                ?.toLowerCase()
-                .includes(searchTag);
+              const searchTag = (
+                searchStrategy.params as any
+              ).compatibilityTag.toLowerCase();
 
               return (
-                tagMatch ||
-                socketMatch ||
-                ramMatch ||
-                formFactorMatch ||
-                psuFormFactorMatch
+                c.compatibilityTag?.toLowerCase().includes(searchTag) ||
+                c.socket?.toLowerCase().includes(searchTag) ||
+                c.formFactor?.toLowerCase().includes(searchTag) ||
+                c.ramType?.toLowerCase().includes(searchTag) ||
+                c.psuFormFactor?.toLowerCase().includes(searchTag)
               );
             });
           }
 
-          if (searchStrategy.params.maxPrice) {
-            const maxPrice = parseFloat(searchStrategy.params.maxPrice);
-            results = results.filter(
-              (c: ComponentResponse) =>
-                c.price !== undefined && c.price <= maxPrice
+          if ((searchStrategy.params as any).maxPrice) {
+            const maxPrice = parseFloat(
+              (searchStrategy.params as any).maxPrice
             );
+            if (!isNaN(maxPrice)) {
+              results = results.filter(
+                (c: ComponentResponse) => (c.price || 0) <= maxPrice
+              );
+            }
           }
 
-          if (
-            searchStrategy.params.minStock &&
-            searchStrategy.params.minStock !== "0"
-          ) {
-            const minStock = parseInt(searchStrategy.params.minStock);
-            results = results.filter(
-              (c: ComponentResponse) =>
-                c.stockQuantity !== undefined && c.stockQuantity >= minStock
-            );
+          if ((searchStrategy.params as any).minStock) {
+            const minStock = parseInt((searchStrategy.params as any).minStock);
+            if (!isNaN(minStock)) {
+              results = results.filter(
+                (c: ComponentResponse) => (c.stockQuantity || 0) >= minStock
+              );
+            }
           }
-          break;
-
-        case "general":
-          // Use both original and expanded search terms for better results
-          results =
-            components?.data?.filter((c: ComponentResponse) => {
-              const searchLower = (
-                searchStrategy.params as string
-              ).toLowerCase();
-              const originalTerm =
-                searchStrategy.originalTerm?.toLowerCase() || searchLower;
-
-              // Search in multiple fields using both terms
-              const searchTerms = [searchLower];
-              if (searchStrategy.originalTerm && searchLower !== originalTerm) {
-                searchTerms.push(originalTerm);
-              }
-
-              return searchTerms.some(
-                (term) =>
-                  c.name?.toLowerCase().includes(term) ||
-                  c.brand?.toLowerCase().includes(term) ||
-                  c.type?.toLowerCase().includes(term) ||
-                  c.compatibilityTag?.toLowerCase().includes(term) ||
-                  c.socket?.toLowerCase().includes(term) ||
-                  c.ramType?.toLowerCase().includes(term) ||
-                  c.formFactor?.toLowerCase().includes(term) ||
-                  c.psuFormFactor?.toLowerCase().includes(term)
-              );
-            }) || [];
-          break;
-
-        case "compatibility":
-          results =
-            components?.data?.filter((c: ComponentResponse) => {
-              const searchTag = (searchStrategy.params as string).toLowerCase();
-              const originalTerm =
-                searchStrategy.originalTerm?.toLowerCase() || searchTag;
-
-              // Search using both expanded and original terms
-              const searchTerms = [searchTag];
-              if (searchStrategy.originalTerm && searchTag !== originalTerm) {
-                searchTerms.push(originalTerm);
-              }
-
-              return searchTerms.some(
-                (term) =>
-                  c.compatibilityTag?.toLowerCase().includes(term) ||
-                  c.socket?.toLowerCase().includes(term) ||
-                  c.ramType?.toLowerCase().includes(term) ||
-                  c.formFactor?.toLowerCase().includes(term) ||
-                  c.psuFormFactor?.toLowerCase().includes(term)
-              );
-            }) || [];
           break;
 
         case "type":
           results = typeSearchResults?.data || [];
           break;
-      }
-    } else if (selectedType) {
-      results = typeComponents?.data || [];
-    } else if (inStockOnly) {
-      results =
-        components?.data?.filter(
-          (c: ComponentResponse) => (c.stockQuantity || 0) > 0
-        ) || [];
-    } else {
-      results = [];
-    }
 
-    // Apply in-stock filter if enabled
-    if (inStockOnly && searchStrategy) {
-      results = results.filter(
-        (c: ComponentResponse) => (c.stockQuantity || 0) > 0
-      );
+        case "general":
+          results = components?.data || [];
+          const searchTermLower = (
+            searchStrategy.params as string
+          ).toLowerCase();
+
+          results = results.filter((c: ComponentResponse) => {
+            const searchableFields = [
+              c.name,
+              c.brand,
+              c.type,
+              c.compatibilityTag,
+              c.socket,
+              c.formFactor,
+              c.ramType,
+              c.psuFormFactor,
+            ]
+              .filter(Boolean)
+              .map((field) => field!.toLowerCase());
+
+            return searchableFields.some((field) =>
+              field.includes(searchTermLower)
+            );
+          });
+          break;
+
+        case "compatibility":
+          results = components?.data || [];
+          const searchTag = (searchStrategy.params as string).toLowerCase();
+
+          results = results.filter((c: ComponentResponse) => {
+            return (
+              c.compatibilityTag?.toLowerCase().includes(searchTag) ||
+              c.socket?.toLowerCase().includes(searchTag) ||
+              c.formFactor?.toLowerCase().includes(searchTag) ||
+              c.ramType?.toLowerCase().includes(searchTag) ||
+              c.psuFormFactor?.toLowerCase().includes(searchTag)
+            );
+          });
+          break;
+
+        default:
+          results = [];
+      }
+    } else {
+      // Browse by type or show all if inStockOnly
+      if (selectedType) {
+        results = typeComponents?.data || [];
+      } else if (inStockOnly) {
+        results =
+          components?.data?.filter(
+            (c: ComponentResponse) => c.stockQuantity && c.stockQuantity > 0
+          ) || [];
+      } else {
+        results = []; // Don't show all components by default
+      }
     }
 
     return results;
   }, [
     searchStrategy,
+    components?.data,
+    typeComponents?.data,
+    typeSearchResults?.data,
     selectedType,
-    components,
-    typeSearchResults,
-    typeComponents,
     inStockOnly,
   ]);
 
-  // Determine loading state
-  const isSearchLoading = useMemo(() => {
-    if (!searchStrategy && !selectedType && !inStockOnly) return false;
+  const isSearchLoading =
+    isLoading || (searchStrategy?.strategy === "type" && isTypeSearchLoading);
+  const searchError = error || typeError || typeSearchError;
 
-    return searchStrategy?.strategy === "type"
-      ? isTypeSearchLoading
-      : isLoading;
-  }, [
-    searchStrategy,
-    selectedType,
-    isLoading,
-    isTypeSearchLoading,
-    inStockOnly,
-  ]);
-
-  // Determine error state
-  const searchError = useMemo(() => {
-    if (!searchStrategy && !selectedType && !inStockOnly) return null;
-
-    if (searchStrategy) {
-      switch (searchStrategy.strategy) {
-        case "advanced":
-        case "general":
-        case "compatibility":
-          return error;
-        case "type":
-          return typeSearchError;
-        default:
-          return null;
-      }
-    }
-
-    return selectedType ? typeError : error;
-  }, [
-    searchStrategy,
-    selectedType,
-    error,
-    typeSearchError,
-    typeError,
-    inStockOnly,
-  ]);
-
-  if (isLoading) return <div className="p-6">Loading components...</div>;
-
-  if (error)
-    return (
-      <div className="p-6">
-        <div className="text-red-600 mb-2">
-          Error loading components: {error.message}
-        </div>
-        <button
-          onClick={() => refetch()}
-          className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-        >
-          Retry
-        </button>
-      </div>
-    );
+  // Get active builds for the build selection modal
+  const availableBuilds =
+    userCarts?.data?.filter((cart) => cart.status === "ACTIVE") || [];
 
   return (
-    <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold mb-4">Component Catalog</h1>
+    <div className="p-6 max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">Component Catalog</h1>
+        <p className="text-gray-600 mt-2">
+          Browse and search for PC components to add to your builds
+        </p>
+      </div>
 
-        {/* Current cart info */}
-        {currentCart && (
-          <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-            <p className="text-sm text-green-800">
-              Adding to cart:{" "}
-              <span className="font-semibold">{currentCart.name}</span>
-              <span className="ml-3">
-                Total:{" "}
-                <span className="font-semibold">
-                  ${currentCart.totalPrice?.toFixed(2) || "0.00"}
-                </span>
-              </span>
-            </p>
-          </div>
-        )}
-
-        {!currentCart && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-sm text-red-800">
-              No cart selected. Create or select a cart in Cart Management to
-              add components.
-            </p>
-          </div>
-        )}
-
+      {/* Search and Filter Controls */}
+      <div className="mb-8">
         <SearchBar
           searchTerm={searchTerm}
           onSearchTermChange={handleSimpleSearch}
@@ -447,13 +457,11 @@ const ComponentCatalog: React.FC = () => {
         />
       </div>
 
-      {/* Component type browsing section */}
+      {/* Browse by Type */}
       {!searchTerm && !showAdvancedSearch && !inStockOnly && (
         <div className="mb-8">
-          <h2 className="text-xl font-semibold mb-4">
-            Browse by Component Type
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          <h2 className="text-xl font-semibold mb-4">Browse by Type</h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             {componentTypes.map((type) => (
               <button
                 key={type.id}
@@ -465,11 +473,9 @@ const ComponentCatalog: React.FC = () => {
                 }`}
               >
                 <div className="font-medium">{type.name}</div>
-                <div className="text-sm text-gray-600 mt-1">
-                  {type.description}
-                </div>
-                <div className="text-sm text-gray-500 mt-2">
-                  {getComponentCount(type.id)} components
+                <div className="text-sm text-gray-600">{type.description}</div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {getComponentCount(type.id)} available
                 </div>
               </button>
             ))}
@@ -477,65 +483,8 @@ const ComponentCatalog: React.FC = () => {
         </div>
       )}
 
-      {/* Results section */}
-      <div className="mb-6">
-        {/* Results header */}
-        {(searchTerm || showAdvancedSearch || selectedType || inStockOnly) && (
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">
-              {searchTerm && (
-                <>
-                  Search results for "{searchTerm}"
-                  {searchStrategy?.expandedTerm &&
-                    searchStrategy.expandedTerm !== searchTerm && (
-                      <span className="text-sm text-blue-600 ml-2">
-                        (expanded from "{searchStrategy.originalTerm}")
-                      </span>
-                    )}
-                </>
-              )}
-              {showAdvancedSearch && "Advanced search results"}
-              {selectedType && `${selectedType} Components`}
-              {inStockOnly && "Components in Stock"}
-              {displayedComponents.length > 0 &&
-                ` (${displayedComponents.length})`}
-            </h2>
-            {(searchTerm ||
-              showAdvancedSearch ||
-              selectedType ||
-              inStockOnly) && (
-              <button
-                onClick={clearAllFilters}
-                className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800 underline"
-              >
-                Clear all
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Search strategy indicator */}
-        {searchStrategy && (
-          <div className="mb-4 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
-            Search strategy:{" "}
-            <span className="font-semibold">{searchStrategy.strategy}</span>
-            {searchStrategy.strategy === "type" && " (detected component type)"}
-            {searchStrategy.strategy === "compatibility" &&
-              " (detected compatibility pattern)"}
-            {searchStrategy.strategy === "general" &&
-              " (general text search with slang expansion)"}
-            {searchStrategy.strategy === "advanced" &&
-              " (multi-field filtering)"}
-            {searchStrategy.expandedTerm &&
-              searchStrategy.expandedTerm !== searchTerm && (
-                <span className="ml-2">
-                  • Expanded "{searchStrategy.originalTerm}" to "
-                  {searchStrategy.expandedTerm}"
-                </span>
-              )}
-          </div>
-        )}
-
+      {/* Results */}
+      <div className="space-y-6">
         {/* Loading state */}
         {isSearchLoading && (
           <div className="text-center py-8">
@@ -560,7 +509,7 @@ const ComponentCatalog: React.FC = () => {
 
         {/* Results grid */}
         {!isSearchLoading && !searchError && displayedComponents.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {displayedComponents.map((component) => (
               <ComponentCard
                 key={component.id}
@@ -617,13 +566,24 @@ const ComponentCatalog: React.FC = () => {
           )}
       </div>
 
-      {/* Quantity Modal */}
+      {/* Modals */}
+      {/* Quantity Modal for Checkout Cart */}
       <QuantityModal
         isOpen={quantityModal.isOpen}
-        onClose={closeModal}
+        onClose={closeQuantityModal}
         onConfirm={handleQuantityConfirm}
         component={quantityModal.component}
         actionType={quantityModal.actionType}
+      />
+
+      {/* Build Selection Modal for Add to Build */}
+      <BuildSelectionModal
+        isOpen={buildSelectionModal.isOpen}
+        onClose={closeBuildSelectionModal}
+        onConfirm={handleBuildSelectionConfirm}
+        component={buildSelectionModal.component}
+        availableBuilds={availableBuilds}
+        isLoading={buildsLoading}
       />
     </div>
   );
