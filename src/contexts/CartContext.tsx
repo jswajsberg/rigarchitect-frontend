@@ -1,12 +1,15 @@
 /* eslint-disable react-refresh/only-export-components */
-// src/contexts/CartContext.tsx - Updated to use selected user
+// src/contexts/CartContext.tsx - Updated to include cart item count
 import React, { createContext, useContext, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetUserCarts,
   useCreateCartForUser,
 } from "../api/build-cart-controller/build-cart-controller";
-import { useCreateItem } from "../api/cart-item-controller/cart-item-controller";
+import {
+  useCreateItem,
+  useGetItemsByCart,
+} from "../api/cart-item-controller/cart-item-controller";
 import { useSelectedUserId } from "./UserContext";
 import type {
   ComponentResponse,
@@ -18,6 +21,7 @@ interface CartContextType {
   currentCart: BuildCartResponse | null;
   activeCarts: BuildCartResponse[];
   selectedCartId: number | null;
+  shoppingCartItemCount: number; // New: total items in shopping cart
   addToCart: (component: ComponentResponse, quantity?: number) => Promise<void>;
   showToast: (message: string, type: "success" | "error" | "info") => void;
   selectCart: (cartId: number) => void;
@@ -43,29 +47,17 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const queryClient = useQueryClient();
-  const selectedUserId = useSelectedUserId(); // Use selected user from UserContext
+  const selectedUserId = useSelectedUserId();
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [selectedCartId, setSelectedCartId] = useState<number | null>(null);
 
-  // Only fetch carts if we have a selected user
-  const {
-    data: userCarts,
-    isLoading,
-    error,
-  } = useGetUserCarts(selectedUserId || 0, {
+  // Fetch user carts
+  const { data: userCarts } = useGetUserCarts(selectedUserId || 0, {
     query: { enabled: !!selectedUserId },
   });
 
   const createCartMutation = useCreateCartForUser();
   const createItemMutation = useCreateItem();
-
-  // Debug logging
-  console.log("🛒 CartProvider Debug:", {
-    selectedUserId,
-    userCarts: userCarts?.data,
-    isLoading,
-    error: error?.message,
-  });
 
   const activeCarts =
     userCarts?.data?.filter((cart) => cart.status === "ACTIVE") || [];
@@ -74,14 +66,24 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
     activeCarts[0] ||
     null;
 
-  console.log("🛒 Cart State:", {
-    selectedUserId,
-    activeCarts: activeCarts.length,
-    selectedCartId,
-    currentCart: currentCart?.id,
-    currentCartName: currentCart?.name,
-    currentCartTotal: currentCart?.totalPrice,
-  });
+  // Find shopping cart (DRAFT status cart used for individual component shopping)
+  const shoppingCart =
+    userCarts?.data?.find((cart) => cart.status === "DRAFT") || null;
+
+  // Fetch shopping cart items to get count
+  const { data: shoppingCartItemsData } = useGetItemsByCart(
+    shoppingCart?.id || 0,
+    {
+      query: { enabled: !!shoppingCart?.id },
+    }
+  );
+
+  const shoppingCartItems = shoppingCartItemsData?.data || [];
+  // Calculate total item count (sum of all quantities)
+  const shoppingCartItemCount = shoppingCartItems.reduce(
+    (total, item) => total + (item.quantity || 0),
+    0
+  );
 
   const selectCart = (cartId: number) => {
     setSelectedCartId(cartId);
@@ -100,19 +102,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
     component: ComponentResponse,
     quantity: number = 1
   ) => {
-    // Check if we have a selected user
     if (!selectedUserId) {
       showToast("Please select a user first", "error");
       return;
     }
-
-    console.log("🛒 AddToCart called:", {
-      selectedUserId,
-      componentId: component.id,
-      componentName: component.name,
-      quantity,
-      currentCart: currentCart?.id,
-    });
 
     try {
       let targetCart = currentCart;
@@ -155,13 +148,24 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
       );
     } catch (error: unknown) {
       console.error("🛒 AddToCart error:", error);
-      const errorMsg = 
-        (error && typeof error === 'object' && 'response' in error && 
-         error.response && typeof error.response === 'object' && 'data' in error.response &&
-         error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data &&
-         typeof error.response.data.message === 'string' ? error.response.data.message :
-         error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' ? error.message : 
-         "Unknown error");
+      const errorMsg =
+        error &&
+        typeof error === "object" &&
+        "response" in error &&
+        error.response &&
+        typeof error.response === "object" &&
+        "data" in error.response &&
+        error.response.data &&
+        typeof error.response.data === "object" &&
+        "message" in error.response.data &&
+        typeof error.response.data.message === "string"
+          ? error.response.data.message
+          : error &&
+            typeof error === "object" &&
+            "message" in error &&
+            typeof error.message === "string"
+          ? error.message
+          : "Unknown error";
       showToast(`Failed to add to cart: ${errorMsg}`, "error");
     }
   };
@@ -175,6 +179,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
     currentCart,
     activeCarts,
     selectedCartId,
+    shoppingCartItemCount,
     addToCart,
     showToast,
     selectCart,

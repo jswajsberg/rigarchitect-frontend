@@ -11,6 +11,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetUserByEmail,
   useCreateUser,
+  useGetAllUsers, // Added to sync budget updates
 } from "../api/user-controller/user-controller";
 import type { UserResponse, UserRequest } from "../api/model";
 
@@ -31,15 +32,6 @@ interface SignUpData {
   password: string;
   budget?: number;
 }
-
-// Future JWT payload structure (placeholder for later integration)
-// interface JWTPayload {
-//   userId: number;
-//   email: string;
-//   exp: number;
-//   iat: number;
-//   // Future: roles, permissions, etc.
-// }
 
 interface AuthContextType {
   // Current state
@@ -91,6 +83,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     },
   });
 
+  // Keep authUser budget in sync with backend data after purchases
+  const { data: allUsersData } = useGetAllUsers({
+    query: {
+      enabled: !!user?.isAuthenticated, // Only fetch when authenticated
+      staleTime: 0, // Always refetch to get latest budget
+    },
+  });
+
   // Create user mutation
   const createUserMutation = useCreateUser({
     mutation: {
@@ -123,6 +123,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       saveAuthState(userByEmailData.data);
     }
   }, [userByEmailData, pendingEmail]);
+
+  // Sync authUser budget with latest backend data when users data updates
+  useEffect(() => {
+    if (user?.isAuthenticated && allUsersData?.data) {
+      const updatedUserData = allUsersData.data.find((u) => u.id === user.id);
+      if (updatedUserData && updatedUserData.budget !== user.budget) {
+        // Update the auth user with fresh budget data
+        const updatedAuthUser: AuthUser = {
+          ...user,
+          budget: updatedUserData.budget,
+        };
+        setUser(updatedAuthUser);
+        saveAuthState(updatedUserData); // Persist updated budget to localStorage
+      }
+    }
+  }, [allUsersData, user]);
 
   const initializeAuth = async () => {
     try {
@@ -216,9 +232,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.error("Signup error:", error);
 
       // Handle specific error cases
-      if (error && typeof error === 'object' && 'response' in error && 
-          error.response && typeof error.response === 'object' && 'status' in error.response && 
-          error.response.status === 409) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "response" in error &&
+        error.response &&
+        typeof error.response === "object" &&
+        "status" in error.response &&
+        error.response.status === 409
+      ) {
         return {
           success: false,
           error: "An account with this email already exists",

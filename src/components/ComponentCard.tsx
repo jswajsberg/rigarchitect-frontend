@@ -58,15 +58,6 @@ const ComponentCard = ({
   const getRelevantDetails = (): ComponentDetail[] => {
     const details: ComponentDetail[] = [];
 
-    // // Always show compatibility tag if available
-    // if (component.compatibilityTag) {
-    //   details.push({
-    //     label: "Compatibility",
-    //     value: component.compatibilityTag,
-    //     important: true,
-    //   });
-    // }
-
     // Type-specific important details
     switch (component.type) {
       case "CPU":
@@ -88,12 +79,6 @@ const ComponentCard = ({
           details.push({
             label: "Length",
             value: `${component.gpuLengthMm}mm`,
-            important: true,
-          });
-        if (component.pciSlotsRequired)
-          details.push({
-            label: "PCI Slots",
-            value: component.pciSlotsRequired,
             important: true,
           });
         if (component.wattage)
@@ -124,12 +109,6 @@ const ComponentCard = ({
             value: component.formFactor,
             important: true,
           });
-        if (component.ramType)
-          details.push({
-            label: "RAM Support",
-            value: component.ramType,
-            important: true,
-          });
         break;
       case "PSU":
         if (component.wattage)
@@ -142,6 +121,19 @@ const ComponentCard = ({
           details.push({
             label: "Form Factor",
             value: component.psuFormFactor,
+            important: true,
+          });
+        break;
+      case "SSD":
+      case "HDD":
+        // Storage capacity info would be in extraCompatibility or compatibilityTag
+        if (
+          component.compatibilityTag &&
+          component.compatibilityTag.includes("GB")
+        )
+          details.push({
+            label: "Capacity",
+            value: component.compatibilityTag,
             important: true,
           });
         break;
@@ -160,33 +152,22 @@ const ComponentCard = ({
             value: `${component.coolerHeightMm}mm`,
             important: true,
           });
-        if (component.socket)
-          details.push({
-            label: "Socket",
-            value: component.socket,
-            important: true,
-          });
-        break;
-      default:
-        // Handle any other component types
         break;
     }
 
-    return details.filter((detail) => detail.value);
+    return details;
   };
 
   const getAllDetails = (): ComponentDetail[] => {
     const allDetails: ComponentDetail[] = [
-      { label: "Brand", value: component.brand },
-      { label: "Type", value: component.type },
-      { label: "Compatibility Tag", value: component.compatibilityTag },
       { label: "Socket", value: component.socket },
       { label: "RAM Type", value: component.ramType },
+      { label: "Form Factor", value: component.formFactor },
+      { label: "Compatibility", value: component.compatibilityTag },
       {
         label: "Wattage",
         value: component.wattage ? `${component.wattage}W` : undefined,
       },
-      { label: "Form Factor", value: component.formFactor },
       {
         label: "GPU Length",
         value: component.gpuLengthMm ? `${component.gpuLengthMm}mm` : undefined,
@@ -208,16 +189,16 @@ const ComponentCard = ({
   const allDetails = getAllDetails();
 
   return (
-    <div className="bg-white border rounded-lg shadow hover:shadow-md transition-all duration-200">
+    <div className="bg-white border rounded-lg shadow hover:shadow-md transition-all duration-200 flex flex-col h-full">
       {/* Card Header - Always Visible */}
-      <div className="p-5">
+      <div className="p-5 flex-1 flex flex-col">
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
             <span className="text-2xl">
               {getComponentTypeIcon(component.type)}
             </span>
-            <div>
-              <h3 className="font-semibold text-lg text-gray-900">
+            <div className="min-w-0 flex-1">
+              <h3 className="font-semibold text-lg text-gray-900 break-words">
                 {component.name || "Unnamed Component"}
               </h3>
               <p className="text-sm text-gray-600">
@@ -225,7 +206,7 @@ const ComponentCard = ({
               </p>
             </div>
           </div>
-          <div className="text-right">
+          <div className="text-right flex-shrink-0">
             <div className="text-xl font-bold text-gray-900">
               {formatPrice(component.price)}
             </div>
@@ -260,8 +241,11 @@ const ComponentCard = ({
           </div>
         )}
 
-        {/* Action Buttons - Improved Layout */}
-        <div className="flex flex-col gap-3">
+        {/* Spacer to push buttons to bottom */}
+        <div className="flex-1"></div>
+
+        {/* Action Buttons - Always at bottom */}
+        <div className="flex flex-col gap-3 mt-auto">
           {/* Show Details Button */}
           <div className="flex justify-start">
             <button

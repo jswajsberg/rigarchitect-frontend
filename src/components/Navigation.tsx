@@ -1,6 +1,9 @@
-// src/components/Navigation.tsx - Updated with PC Builder
+// src/components/Navigation.tsx - Updated with cart item count and simple budget editing
 import React, { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import { useCart } from "../contexts/CartContext";
+import { useUpdateUserBudget } from "../api/user-controller/user-controller";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface NavigationProps {
   activeTab: string;
@@ -9,18 +12,73 @@ interface NavigationProps {
 
 const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
   const { user: authUser, logout } = useAuth();
+  const { shoppingCartItemCount } = useCart();
+  const queryClient = useQueryClient();
   const [showUserMenu, setShowUserMenu] = useState(false);
+
+  // Budget editing state
+  const [isEditingBudget, setIsEditingBudget] = useState(false);
+  const [budgetInput, setBudgetInput] = useState("");
+
+  const updateBudgetMutation = useUpdateUserBudget({
+    mutation: {
+      onSuccess: () => {
+        setIsEditingBudget(false);
+        // The AuthContext will automatically sync the updated budget
+        queryClient.invalidateQueries({
+          queryKey: ["/api/v1/users"],
+        });
+      },
+      onError: (error) => {
+        console.error("Failed to update budget:", error);
+        alert("Failed to update budget. Please try again.");
+      },
+    },
+  });
 
   const tabs = [
     { id: "components", label: "Components", icon: "🔧" },
     { id: "builds", label: "PC Builder", icon: "🖥️" },
     { id: "orders", label: "Order History", icon: "📦" },
-    { id: "cart", label: "Shopping Cart", icon: "🛒" },
+    {
+      id: "cart",
+      label: "Shopping Cart",
+      icon: "🛒",
+      badge: shoppingCartItemCount > 0 ? shoppingCartItemCount : undefined,
+    },
   ];
 
   const handleLogout = () => {
     logout();
     setShowUserMenu(false);
+  };
+
+  const handleBudgetEdit = () => {
+    setBudgetInput((authUser?.budget || 0).toString());
+    setIsEditingBudget(true);
+  };
+
+  const handleBudgetSave = async () => {
+    if (!authUser?.id) return;
+
+    const newBudget = parseFloat(budgetInput);
+    if (isNaN(newBudget) || newBudget < 0) {
+      alert("Please enter a valid budget amount");
+      return;
+    }
+
+    // Soft cap at $9999
+    const cappedBudget = Math.min(newBudget, 9999);
+
+    await updateBudgetMutation.mutateAsync({
+      id: authUser.id,
+      data: { budget: cappedBudget },
+    });
+  };
+
+  const handleBudgetCancel = () => {
+    setIsEditingBudget(false);
+    setBudgetInput("");
   };
 
   return (
@@ -37,7 +95,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 relative ${
                     activeTab === tab.id
                       ? "bg-blue-600 text-white"
                       : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
@@ -45,6 +103,11 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
                 >
                   <span>{tab.icon}</span>
                   <span>{tab.label}</span>
+                  {tab.badge && (
+                    <span className="ml-1 bg-blue-500 text-white text-xs font-medium rounded-full min-w-[16px] h-[16px] flex items-center justify-center px-1">
+                      {tab.badge}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
@@ -65,8 +128,41 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
           {/* Right - Budget + User menu */}
           <div className="flex items-center space-x-4">
             {authUser && (
-              <div className="text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-2 rounded-lg whitespace-nowrap">
-                Budget: ${authUser.budget?.toLocaleString()}
+              <div className="w-40 flex items-center">
+                {!isEditingBudget ? (
+                  // Display mode
+                  <button
+                    onClick={handleBudgetEdit}
+                    className="w-full text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-2 rounded-lg hover:bg-blue-100 transition-colors text-center"
+                    title="Click to edit budget"
+                  >
+                    Budget: ${authUser.budget?.toLocaleString()}
+                  </button>
+                ) : (
+                  // Edit mode
+                  <div className="w-full flex items-center bg-blue-50 border border-blue-200 rounded-lg px-2 py-2">
+                    <span className="text-sm font-semibold text-blue-700 mr-1">
+                      $
+                    </span>
+                    <input
+                      type="number"
+                      value={budgetInput}
+                      onChange={(e) => setBudgetInput(e.target.value)}
+                      onBlur={handleBudgetSave}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.currentTarget.blur();
+                        }
+                        if (e.key === "Escape") handleBudgetCancel();
+                      }}
+                      className="flex-1 text-sm font-semibold text-blue-700 bg-transparent border-none focus:outline-none text-center"
+                      min="0"
+                      max="9999"
+                      disabled={updateBudgetMutation.isPending}
+                      autoFocus
+                    />
+                  </div>
+                )}
               </div>
             )}
 
