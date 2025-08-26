@@ -11,6 +11,7 @@ import {
   useUpdateQuantity,
   useDeleteItem,
   useGetItemsByCart,
+  useClearCart,
 } from "../api/cart-item-controller/cart-item-controller";
 import { useGetAllComponents } from "../api/component-controller/component-controller";
 import type { ComponentResponse, CartItemRequest } from "../api/model";
@@ -39,6 +40,7 @@ const ShoppingCart = () => {
   const createItemMutation = useCreateItem();
   const updateQuantityMutation = useUpdateQuantity();
   const deleteItemMutation = useDeleteItem();
+  const clearCartMutation = useClearCart();
 
   // Get the user's shopping cart (DRAFT status)
   const shoppingCart = useMemo(
@@ -192,6 +194,36 @@ const ShoppingCart = () => {
     }
   };
 
+  const handleClearCart = async () => {
+    if (!shoppingCart || cartItems.length === 0) return;
+
+    const confirmClear = window.confirm(
+      `Are you sure you want to remove all ${cartItems.length} items from your shopping cart? This action cannot be undone.`
+    );
+    if (!confirmClear) return;
+
+    try {
+      await clearCartMutation.mutateAsync({ cartId: shoppingCart.id! });
+
+      // Refresh cart data and items
+      queryClient.invalidateQueries({
+        queryKey: [`/api/v1/carts/user/${selectedUserId}`],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/v1/items/cart/${shoppingCart.id}`],
+      });
+
+      alert("All items removed from cart successfully");
+    } catch (error: any) {
+      console.error("Failed to clear cart:", error);
+      alert(
+        `Failed to clear cart: ${
+          error.response?.data?.message || error.message
+        }`
+      );
+    }
+  };
+
   const handleCheckout = () => {
     if (!shoppingCart || cartItems.length === 0) return;
     setShowCheckoutModal(true);
@@ -238,7 +270,19 @@ const ShoppingCart = () => {
         <div className="lg:col-span-2">
           <div className="bg-white rounded-lg shadow-md">
             <div className="p-6 border-b border-gray-200">
-              <h3 className="text-xl font-semibold">Cart Items</h3>
+              <div className="flex justify-between items-center">
+                <h3 className="text-xl font-semibold">Cart Items</h3>
+                {cartItems.length > 0 && (
+                  <button
+                    onClick={handleClearCart}
+                    disabled={clearCartMutation.isPending}
+                    className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:bg-red-300 text-sm transition-colors"
+                    title="Remove all items from cart"
+                  >
+                    {clearCartMutation.isPending ? "Clearing..." : "Clear All"}
+                  </button>
+                )}
+              </div>
               {itemsLoading && (
                 <div className="text-sm text-gray-500 mt-2">
                   Loading items...
@@ -444,6 +488,7 @@ const ShoppingCart = () => {
               <li>• Add individual components using Quick Add</li>
               <li>• Mix and match from different sources</li>
               <li>• Items stay in cart until checkout or removed</li>
+              <li>• Use "Clear All" to quickly empty your cart</li>
             </ul>
           </div>
         </div>

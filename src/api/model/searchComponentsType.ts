@@ -9,6 +9,7 @@
 export type SearchComponentsType = typeof SearchComponentsType[keyof typeof SearchComponentsType];
 
 
+// eslint-disable-next-line @typescript-eslint/no-redeclare
 export const SearchComponentsType = {
   CPU: 'CPU',
   GPU: 'GPU',

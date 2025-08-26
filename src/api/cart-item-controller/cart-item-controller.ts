@@ -400,3 +400,65 @@ export function useGetItemsByCart<TData = Awaited<ReturnType<typeof getItemsByCa
 
 
 
+/**
+ * Remove all items from a specific cart in one operation
+ * @summary Clear all items from cart
+ */
+export const clearCart = (
+    cartId: number, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<MessageResponse>> => {
+    
+    
+    return axios.default.delete(
+      `/api/v1/items/cart/${cartId}/clear`,options
+    );
+  }
+
+
+
+export const getClearCartMutationOptions = <TError = AxiosError<MessageResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearCart>>, TError,{cartId: number}, TContext>, axios?: AxiosRequestConfig}
+): UseMutationOptions<Awaited<ReturnType<typeof clearCart>>, TError,{cartId: number}, TContext> => {
+
+const mutationKey = ['clearCart'];
+const {mutation: mutationOptions, axios: axiosOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, axios: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof clearCart>>, {cartId: number}> = (props) => {
+          const {cartId} = props ?? {};
+
+          return  clearCart(cartId,axiosOptions)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ClearCartMutationResult = NonNullable<Awaited<ReturnType<typeof clearCart>>>
+    
+    export type ClearCartMutationError = AxiosError<MessageResponse>
+
+    /**
+ * @summary Clear all items from cart
+ */
+export const useClearCart = <TError = AxiosError<MessageResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearCart>>, TError,{cartId: number}, TContext>, axios?: AxiosRequestConfig}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof clearCart>>,
+        TError,
+        {cartId: number},
+        TContext
+      > => {
+
+      const mutationOptions = getClearCartMutationOptions(options);
+
+      return useMutation(mutationOptions , queryClient);
+    }
+    
