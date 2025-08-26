@@ -1,4 +1,4 @@
-// src/App.tsx - Updated with BuildManagement routing
+// src/App.tsx - Updated with BuildManagement routing + BuilderProvider
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
@@ -9,6 +9,7 @@ import {
   NavigationProvider,
   useNavigation,
 } from "./contexts/NavigationContext";
+import { BuilderProvider } from "./contexts/BuilderContext"; // <-- NEW
 import ProtectedRoute from "./components/ProtectedRoute";
 import Navigation from "./components/Navigation";
 import ShoppingCart from "./pages/ShoppingCart";
@@ -60,9 +61,11 @@ const ProtectedApp = () => {
     <UserProvider>
       <CartProvider>
         <NavigationProvider>
-          <ProtectedRoute>
-            <AppContent />
-          </ProtectedRoute>
+          <BuilderProvider>
+            <ProtectedRoute>
+              <AppContent />
+            </ProtectedRoute>
+          </BuilderProvider>
         </NavigationProvider>
       </CartProvider>
     </UserProvider>

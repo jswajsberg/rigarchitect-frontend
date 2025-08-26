@@ -1,4 +1,4 @@
-// src/pages/PCBuilder.tsx - Unified PC Builder with build loader
+// src/pages/PCBuilder.tsx - Unified PC Builder with build loader (now using BuilderContext for persistent state)
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCart } from "../contexts/CartContext";
@@ -28,6 +28,7 @@ import {
   applyBuildTemplate,
   getBuildTemplate,
 } from "../utils/buildTemplates";
+import { useBuilder } from "../contexts/BuilderContext";
 
 // Component Slot Component
 interface ComponentSlotProps {
@@ -48,6 +49,24 @@ const ComponentSlot: React.FC<ComponentSlotProps> = ({
   issues,
 }) => {
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [wasFilledPreviously, setWasFilledPreviously] = useState(false);
+
+  // Track component changes to detect when slot becomes empty after being filled
+  useEffect(() => {
+    const isEmpty =
+      !component || (Array.isArray(component) && component.length === 0);
+    const hasSuggestions = suggestions && suggestions.length > 0;
+
+    if (!isEmpty) {
+      // Slot is filled, remember this and close suggestions
+      setWasFilledPreviously(true);
+      setShowSuggestions(false);
+    } else if (isEmpty && wasFilledPreviously && hasSuggestions) {
+      // Slot became empty after being filled - auto-show suggestions
+      setShowSuggestions(true);
+      setWasFilledPreviously(false);
+    }
+  }, [component, suggestions, wasFilledPreviously]);
 
   const slotIssues = issues.filter((issue) =>
     issue.affectedComponents.some((comp) => {
@@ -185,18 +204,22 @@ const PCBuilder: React.FC = () => {
   const { data: allComponents } = useGetAllComponents();
   const createItemMutation = useCreateItem();
 
-  // Build management state
-  const [selectedBuildId, setSelectedBuildId] = useState<number | null>(null);
-  const [resetKey, setResetKey] = useState(0);
+  // === Persistent builder state (moved to BuilderContext) ===
+  const {
+    selectedBuildId,
+    setSelectedBuildId,
+    currentBuild,
+    setCurrentBuild,
+    priceRange,
+    setPriceRange,
+    buildName,
+    setBuildName,
+    isModifyingExisting,
+    setIsModifyingExisting,
+  } = useBuilder();
 
-  // Build state
-  const [currentBuild, setCurrentBuild] = useState<BuildSlots>({});
-  const [priceRange, setPriceRange] = useState<{ min: number; max: number }>({
-    min: 0,
-    max: 5000,
-  });
-  const [buildName, setBuildName] = useState("");
-  const [isModifyingExisting, setIsModifyingExisting] = useState(false);
+  // === Local UI-only state ===
+  const [resetKey, setResetKey] = useState(0);
 
   // Get saved builds (ACTIVE status)
   const { data: userCarts, isLoading: cartsLoading } = useGetUserCarts(
@@ -254,7 +277,7 @@ const PCBuilder: React.FC = () => {
     return total;
   }, [currentBuild]);
 
-  // Component suggestions for each slot
+  // Component suggestions for each slot - FIXED to always show suggestions
   const suggestions = useMemo(() => {
     const result: Partial<Record<keyof BuildSlots, ComponentResponse[]>> = {};
 
@@ -271,17 +294,28 @@ const PCBuilder: React.FC = () => {
     ];
 
     allSlots.forEach((slot) => {
-      if (
-        !currentBuild[slot] ||
-        (Array.isArray(currentBuild[slot]) &&
-          (currentBuild[slot] as ComponentResponse[]).length === 0)
-      ) {
-        result[slot] = getComponentSuggestions(
-          currentBuild,
-          slot,
-          components,
-          priceRange
-        );
+      // CHANGED: Always generate suggestions for all slots, not just empty ones
+      // This allows users to see alternatives even when slots are filled (like after applying templates)
+      const s = getComponentSuggestions(
+        currentBuild,
+        slot,
+        components,
+        priceRange
+      );
+
+      // Filter out the currently selected component(s) from suggestions to avoid duplicates
+      if (currentBuild[slot]) {
+        if (Array.isArray(currentBuild[slot])) {
+          const selectedIds = (currentBuild[slot] as ComponentResponse[]).map(
+            (c) => c.id
+          );
+          result[slot] = s.filter((comp) => !selectedIds.includes(comp.id));
+        } else {
+          const selectedId = (currentBuild[slot] as ComponentResponse).id;
+          result[slot] = s.filter((comp) => comp.id !== selectedId);
+        }
+      } else {
+        result[slot] = s;
       }
     });
 
@@ -299,7 +333,7 @@ const PCBuilder: React.FC = () => {
         setBuildName(build.name || "");
       }
     },
-    [savedBuilds]
+    [savedBuilds, setSelectedBuildId, setIsModifyingExisting, setBuildName]
   );
 
   // Load components when build is selected
@@ -333,7 +367,7 @@ const PCBuilder: React.FC = () => {
 
       setCurrentBuild(buildSlots);
     }
-  }, [selectedBuildItems, allComponents]);
+  }, [selectedBuildItems, allComponents, setCurrentBuild]);
 
   // Handle component selection
   const handleSelectComponent = useCallback(
@@ -359,7 +393,7 @@ const PCBuilder: React.FC = () => {
         return newBuild;
       });
     },
-    []
+    [setCurrentBuild]
   );
 
   // Handle component removal
@@ -387,7 +421,7 @@ const PCBuilder: React.FC = () => {
         return newBuild;
       });
     },
-    []
+    [setCurrentBuild]
   );
 
   // Apply template
@@ -403,7 +437,14 @@ const PCBuilder: React.FC = () => {
       setIsModifyingExisting(false);
       setSelectedBuildId(null);
     },
-    [components]
+    [
+      components,
+      setCurrentBuild,
+      setPriceRange,
+      setBuildName,
+      setIsModifyingExisting,
+      setSelectedBuildId,
+    ]
   );
 
   // Save build (create new or update existing) - Modified to allow empty builds
@@ -417,8 +458,6 @@ const PCBuilder: React.FC = () => {
       alert("Please select a user first");
       return;
     }
-
-    // Removed the check for empty builds - now allows saving empty builds
 
     try {
       let targetBuildId: number;
@@ -519,13 +558,15 @@ const PCBuilder: React.FC = () => {
     deleteItemMutation,
     createCartItemMutation,
     queryClient,
+    setSelectedBuildId,
+    setIsModifyingExisting,
   ]);
 
   // Delete build
   const handleDeleteBuild = useCallback(
-    async (buildId: number, buildName: string) => {
+    async (buildId: number, buildNameParam: string) => {
       const confirmDelete = window.confirm(
-        `Are you sure you want to delete "${buildName}"? This action cannot be undone.`
+        `Are you sure you want to delete "${buildNameParam}"? This action cannot be undone.`
       );
       if (!confirmDelete) return;
 
@@ -544,13 +585,22 @@ const PCBuilder: React.FC = () => {
           setIsModifyingExisting(false);
         }
 
-        alert(`Build "${buildName}" deleted successfully.`);
+        alert(`Build "${buildNameParam}" deleted successfully.`);
       } catch (error: any) {
         console.error("Failed to delete build:", error);
         alert("Failed to delete build. Please try again.");
       }
     },
-    [deleteCartMutation, queryClient, selectedUserId, selectedBuildId]
+    [
+      deleteCartMutation,
+      queryClient,
+      selectedUserId,
+      selectedBuildId,
+      setSelectedBuildId,
+      setCurrentBuild,
+      setBuildName,
+      setIsModifyingExisting,
+    ]
   );
 
   // Add build to shopping cart
@@ -645,7 +695,12 @@ const PCBuilder: React.FC = () => {
     setSelectedBuildId(null);
     setIsModifyingExisting(false);
     setResetKey((prev) => prev + 1);
-  }, []);
+  }, [
+    setCurrentBuild,
+    setBuildName,
+    setSelectedBuildId,
+    setIsModifyingExisting,
+  ]);
 
   // Create new build
   const handleNewBuild = useCallback(() => {
@@ -662,7 +717,13 @@ const PCBuilder: React.FC = () => {
     setSelectedBuildId(null);
     setIsModifyingExisting(false);
     setResetKey((prev) => prev + 1);
-  }, [currentBuild]);
+  }, [
+    currentBuild,
+    setCurrentBuild,
+    setBuildName,
+    setSelectedBuildId,
+    setIsModifyingExisting,
+  ]);
 
   if (!selectedUserId) {
     return (
