@@ -1,9 +1,22 @@
-// src/components/Navigation.tsx - Updated with cart item count and simple budget editing
+// src/components/Navigation.tsx - Enhanced with professional Lucide icons
 import React, { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useCart } from "../contexts/CartContext";
 import { useUpdateUserBudget } from "../api/user-controller/user-controller";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  Search, // Components
+  Wrench, // PC Builder
+  Package, // Order History
+  ShoppingCart, // Shopping Cart
+  User, // User menu
+  LogOut, // Logout
+  Edit3, // Edit budget
+  Save, // Save budget
+  X, // Cancel budget edit
+  DollarSign, // Budget indicator
+  ChevronDown, // User menu dropdown
+} from "lucide-react";
 
 interface NavigationProps {
   activeTab: string;
@@ -36,14 +49,31 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
     },
   });
 
+  // Enhanced tabs with professional Lucide icons
   const tabs = [
-    { id: "components", label: "Components", icon: "🔧" },
-    { id: "builds", label: "PC Builder", icon: "🖥️" },
-    { id: "orders", label: "Order History", icon: "📦" },
+    {
+      id: "components",
+      label: "Components",
+      icon: Search,
+      color: "text-blue-600",
+    },
+    {
+      id: "builds",
+      label: "PC Builder",
+      icon: Wrench,
+      color: "text-purple-600",
+    },
+    {
+      id: "orders",
+      label: "Order History",
+      icon: Package,
+      color: "text-green-600",
+    },
     {
       id: "cart",
       label: "Shopping Cart",
-      icon: "🛒",
+      icon: ShoppingCart,
+      color: "text-orange-600",
       badge: shoppingCartItemCount > 0 ? shoppingCartItemCount : undefined,
     },
   ];
@@ -82,169 +112,191 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
   };
 
   return (
-    <nav className="bg-white shadow-lg">
+    <nav className="bg-white shadow-lg border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center h-16">
-          {/* Left - Logo + Tabs */}
+          {/* Left - Enhanced Logo + Tabs */}
           <div className="flex items-center space-x-8">
-            <div className="flex-shrink-0">
+            <div className="flex-shrink-0 flex items-center gap-2">
+              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-sm">R</span>
+              </div>
               <h1 className="text-xl font-bold text-gray-900">RigArchitect</h1>
             </div>
-            <div className="flex space-x-4">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 relative ${
-                    activeTab === tab.id
-                      ? "bg-blue-600 text-white"
-                      : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
-                  }`}
-                >
-                  <span>{tab.icon}</span>
-                  <span>{tab.label}</span>
-                  {tab.badge && (
-                    <span className="ml-1 bg-blue-500 text-white text-xs font-medium rounded-full min-w-[16px] h-[16px] flex items-center justify-center px-1">
-                      {tab.badge}
-                    </span>
-                  )}
-                </button>
-              ))}
+
+            <div className="flex space-x-1">
+              {tabs.map((tab) => {
+                const IconComponent = tab.icon;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 relative ${
+                      activeTab === tab.id
+                        ? "bg-blue-100 text-blue-700 shadow-sm"
+                        : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                    }`}
+                  >
+                    <IconComponent
+                      size={18}
+                      className={
+                        activeTab === tab.id ? tab.color : "text-gray-500"
+                      }
+                    />
+                    <span>{tab.label}</span>
+
+                    {/* Enhanced cart badge */}
+                    {tab.badge && (
+                      <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold shadow-sm">
+                        {tab.badge > 99 ? "99+" : tab.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Center - Welcome message (hidden on small screens) */}
-          {authUser && (
-            <div className="hidden md:flex flex-1 justify-center">
-              <div className="text-sm text-gray-600 whitespace-nowrap">
-                Welcome back,{" "}
-                <span className="font-medium text-gray-900">
-                  {authUser.name}
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Right - Budget + User menu */}
-          <div className="flex items-center space-x-4">
+          {/* Right - Enhanced User Menu */}
+          <div className="ml-auto flex items-center space-x-4">
+            {/* Budget Display */}
             {authUser && (
-              <div className="w-40 flex items-center">
-                {!isEditingBudget ? (
-                  // Display mode
-                  <button
-                    onClick={handleBudgetEdit}
-                    className="w-full text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-2 rounded-lg hover:bg-blue-100 transition-colors text-center"
-                    title="Click to edit budget"
-                  >
-                    Budget: ${authUser.budget?.toLocaleString()}
-                  </button>
-                ) : (
-                  // Edit mode
-                  <div className="w-full flex items-center bg-blue-50 border border-blue-200 rounded-lg px-2 py-2">
-                    <span className="text-sm font-semibold text-blue-700 mr-1">
-                      $
-                    </span>
+              <div className="flex items-center gap-2 text-sm">
+                <DollarSign size={16} className="text-green-600" />
+                <span className="text-gray-600">Budget:</span>
+                {isEditingBudget ? (
+                  <div className="flex items-center gap-2">
                     <input
                       type="number"
                       value={budgetInput}
                       onChange={(e) => setBudgetInput(e.target.value)}
-                      onBlur={handleBudgetSave}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.currentTarget.blur();
-                        }
-                        if (e.key === "Escape") handleBudgetCancel();
-                      }}
-                      className="flex-1 text-sm font-semibold text-blue-700 bg-transparent border-none focus:outline-none text-center"
                       min="0"
                       max="9999"
-                      disabled={updateBudgetMutation.isPending}
+                      className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="0"
                       autoFocus
                     />
+                    <button
+                      onClick={handleBudgetSave}
+                      disabled={updateBudgetMutation.isPending}
+                      className="p-1 text-green-600 hover:text-green-700 disabled:text-gray-400"
+                      title="Save budget"
+                    >
+                      <Save size={16} />
+                    </button>
+                    <button
+                      onClick={handleBudgetCancel}
+                      className="p-1 text-gray-600 hover:text-gray-700"
+                      title="Cancel edit"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-green-600">
+                      ${authUser.budget?.toFixed(2) || "0.00"}
+                    </span>
+                    <button
+                      onClick={handleBudgetEdit}
+                      className="p-1 text-gray-400 hover:text-gray-600"
+                      title="Edit budget"
+                    >
+                      <Edit3 size={14} />
+                    </button>
                   </div>
                 )}
               </div>
             )}
 
-            {/* User menu */}
-            <div className="relative">
-              <button
-                onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex items-center space-x-2 text-gray-700 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-md p-2"
-              >
-                <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
-                  <span className="text-white text-sm font-medium">
-                    {authUser?.name?.charAt(0).toUpperCase() || "U"}
-                  </span>
-                </div>
-                <svg
-                  className={`w-4 h-4 transition-transform ${
-                    showUserMenu ? "rotate-180" : ""
-                  }`}
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
+            {/* Enhanced User Menu */}
+            {authUser && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="flex items-center gap-2 px-3 py-2 text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
                 >
-                  <path
-                    fillRule="evenodd"
-                    d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-                    clipRule="evenodd"
+                  <User size={20} className="text-gray-600" />
+                  <span className="text-sm font-medium">{authUser.name}</span>
+                  <ChevronDown
+                    size={16}
+                    className={`transition-transform ${
+                      showUserMenu ? "rotate-180" : ""
+                    }`}
                   />
-                </svg>
-              </button>
+                </button>
 
-              {/* Dropdown menu */}
-              {showUserMenu && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border">
-                  <div className="px-4 py-2 text-sm text-gray-500 border-b">
-                    {authUser?.email}
-                  </div>
-
-                  {/* Profile Settings - Future feature */}
-                  <button
-                    onClick={() => {
-                      console.log("Profile settings - Coming soon");
-                      setShowUserMenu(false);
-                    }}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-2"
-                  >
-                    <span>⚙️</span>
-                    <span>Profile Settings</span>
-                    <span className="ml-auto text-xs text-gray-400">Soon</span>
-                  </button>
-
-                  {/* Development info */}
-                  {process.env.NODE_ENV === "development" && (
-                    <div className="border-t border-gray-100 px-4 py-2">
-                      <p className="text-xs text-gray-400">Dev Mode</p>
-                      <p className="text-xs text-gray-500">
-                        ID: {authUser?.id}
-                      </p>
+                {/* Enhanced Dropdown Menu */}
+                {showUserMenu && (
+                  <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+                    {/* User Info Section */}
+                    <div className="px-4 py-3 border-b border-gray-100">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
+                          <User size={20} className="text-white" />
+                        </div>
+                        <div>
+                          <div className="font-medium text-gray-900">
+                            {authUser.name}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {authUser.email}
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  )}
 
-                  {/* Logout */}
-                  <div className="border-t border-gray-100">
-                    <button
-                      onClick={handleLogout}
-                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2"
-                    >
-                      <span>🚪</span>
-                      <span>Sign Out</span>
-                    </button>
+                    {/* Budget Section */}
+                    <div className="px-4 py-3 border-b border-gray-100">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <DollarSign size={16} className="text-green-600" />
+                          <span className="text-sm text-gray-600">
+                            Current Budget:
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-green-600">
+                            ${authUser.budget?.toFixed(2) || "0.00"}
+                          </span>
+                          <button
+                            onClick={() => {
+                              handleBudgetEdit();
+                              setShowUserMenu(false);
+                            }}
+                            className="p-1 text-gray-400 hover:text-gray-600 rounded"
+                            title="Edit budget"
+                          >
+                            <Edit3 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Actions Section */}
+                    <div className="py-2">
+                      <button
+                        onClick={handleLogout}
+                        className="w-full flex items-center gap-3 px-4 py-2 text-left text-gray-700 hover:bg-gray-50 transition-colors"
+                      >
+                        <LogOut size={16} className="text-red-600" />
+                        <span className="text-sm">Sign Out</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Click outside to close menu */}
+      {/* Click outside to close user menu */}
       {showUserMenu && (
         <div
           className="fixed inset-0 z-40"
           onClick={() => setShowUserMenu(false)}
-        ></div>
+        />
       )}
     </nav>
   );

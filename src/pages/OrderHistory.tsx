@@ -372,7 +372,7 @@ const OrderCard = ({
           </head>
           <body>
             <div class="header">
-              <h1>RigArchitect</h1>
+              <h1>🏗️ RigArchitect</h1>
               <h2>Order Receipt</h2>
             </div>
             <div class="order-info">
@@ -457,8 +457,8 @@ const OrderCard = ({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-              <div className="flex items-center gap-2 text-gray-600">
-                <Calendar size={16} className="text-blue-600" />
+              <div className="flex items-end gap-2 text-gray-600">
+                <Calendar size={14} className="text-blue-600 mb-1" />
                 <div>
                   <span className="font-medium">Order Date:</span>
                   <br />
@@ -467,21 +467,21 @@ const OrderCard = ({
                   </span>
                 </div>
               </div>
-              <div className="flex items-center gap-2 text-gray-600">
-                <Hash size={16} className="text-purple-600" />
+              <div className="flex items-end gap-2 text-gray-600">
+                <Hash size={20} className="text-purple-600 mb-0.4" />
                 <div>
                   <span className="font-medium">Order ID:</span>
                   <br />
-                  <span className="text-gray-900">#{order.id}</span>
+                  <span className="text-gray-900">{order.id}</span>
                 </div>
               </div>
-              <div className="flex items-center gap-2 text-gray-600">
-                <DollarSign size={16} className="text-green-600" />
+              <div className="flex items-end gap-2 text-gray-600">
+                <DollarSign size={20} className="text-green-600 mb-1" />
                 <div>
                   <span className="font-medium">Total:</span>
                   <br />
                   <span className="text-xl font-bold text-green-600">
-                    ${order.totalPrice?.toFixed(2) || "0.00"}
+                    {order.totalPrice?.toFixed(2) || "0.00"}
                   </span>
                 </div>
               </div>

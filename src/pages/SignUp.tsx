@@ -1,25 +1,41 @@
-// src/pages/SignUp.tsx
+// src/pages/SignUp.tsx - Enhanced with professional Lucide icons and modern styling
 import React, { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import AuthLayout from "../components/AuthLayout";
+import {
+  User,
+  Mail,
+  Lock,
+  DollarSign,
+  UserPlus,
+  Loader2,
+  LogIn,
+  Eye,
+  EyeOff,
+  AlertCircle,
+  Info,
+  CheckCircle,
+} from "lucide-react";
 
 interface SignUpProps {
-  onBackToLogin?: () => void;
+  onBackToLogin: () => void;
 }
 
 const SignUp: React.FC<SignUpProps> = ({ onBackToLogin }) => {
   const { signup, isLoading } = useAuth();
 
-  // Form state
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     password: "",
     confirmPassword: "",
-    budget: "5000",
+    budget: "",
   });
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [serverError, setServerError] = useState<string | null>(null);
+
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -28,332 +44,289 @@ const SignUp: React.FC<SignUpProps> = ({ onBackToLogin }) => {
       [name]: value,
     }));
 
-    // Clear field-specific error when user starts typing
-    if (errors[name]) {
-      setErrors((prev) => ({
-        ...prev,
-        [name]: "",
-      }));
-    }
-
-    // Clear server error
-    if (serverError) setServerError(null);
+    // Clear messages when user starts typing
+    if (error) setError(null);
+    if (success) setSuccess(null);
   };
 
-  const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {};
-
-    // Name validation
+  const validateForm = () => {
     if (!formData.name.trim()) {
-      newErrors.name = "Name is required";
-    } else if (formData.name.trim().length < 2) {
-      newErrors.name = "Name must be at least 2 characters";
+      setError("Name is required");
+      return false;
     }
-
-    // Email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!formData.email.trim()) {
-      newErrors.email = "Email is required";
-    } else if (!emailRegex.test(formData.email.trim())) {
-      newErrors.email = "Please enter a valid email address";
+      setError("Email is required");
+      return false;
     }
-
-    // Password validation
-    if (!formData.password) {
-      newErrors.password = "Password is required";
-    } else if (formData.password.length < 6) {
-      newErrors.password = "Password must be at least 6 characters";
+    if (!formData.email.includes("@")) {
+      setError("Please enter a valid email address");
+      return false;
     }
-
-    // Confirm password validation
-    if (!formData.confirmPassword) {
-      newErrors.confirmPassword = "Please confirm your password";
-    } else if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = "Passwords do not match";
+    if (formData.password.length < 6) {
+      setError("Password must be at least 6 characters");
+      return false;
     }
-
-    // Budget validation
-    const budget = parseFloat(formData.budget);
-    if (isNaN(budget) || budget < 0) {
-      newErrors.budget = "Please enter a valid budget amount";
-    } else if (budget > 50000) {
-      newErrors.budget = "Budget cannot exceed $50,000";
+    if (formData.password !== formData.confirmPassword) {
+      setError("Passwords do not match");
+      return false;
     }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    if (
+      formData.budget &&
+      (parseFloat(formData.budget) < 0 || parseFloat(formData.budget) > 9999)
+    ) {
+      setError("Budget must be between $0 and $9,999");
+      return false;
+    }
+    return true;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
 
     const result = await signup({
       name: formData.name.trim(),
       email: formData.email.trim().toLowerCase(),
       password: formData.password,
-      budget: parseFloat(formData.budget),
+      budget: formData.budget ? parseFloat(formData.budget) : undefined,
     });
 
-    if (!result.success) {
-      setServerError(result.error || "Signup failed");
-    }
-    // On success, the AuthContext will automatically log the user in
-  };
-
-  const budgetOptions = [
-    { value: "1000", label: "$1,000 - Budget Build" },
-    { value: "2500", label: "$2,500 - Mid-Range" },
-    { value: "5000", label: "$5,000 - High-End" },
-    { value: "10000", label: "$10,000 - Enthusiast" },
-    { value: "custom", label: "Custom Amount" },
-  ];
-
-  const [showCustomBudget, setShowCustomBudget] = useState(false);
-
-  const handleBudgetChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const value = e.target.value;
-    if (value === "custom") {
-      setShowCustomBudget(true);
-      setFormData((prev) => ({ ...prev, budget: "" }));
+    if (result.success) {
+      setSuccess("Account created successfully! You can now sign in.");
+      setError(null);
+      // Auto-switch to login after 2 seconds
+      setTimeout(() => {
+        onBackToLogin();
+      }, 2000);
     } else {
-      setShowCustomBudget(false);
-      setFormData((prev) => ({ ...prev, budget: value }));
+      setError(result.error || "Failed to create account");
+      setSuccess(null);
     }
   };
 
   return (
     <AuthLayout
       title="Create your account"
-      subtitle="Join RigArchitect and start building your dream PC"
+      subtitle="Join RigArchitect and start building your perfect PC"
     >
-      <form className="space-y-6" onSubmit={handleSubmit}>
-        {/* Name field */}
-        <div>
-          <label
-            htmlFor="name"
-            className="block text-sm font-medium text-gray-700"
-          >
-            Full Name
-          </label>
-          <input
-            id="name"
-            name="name"
-            type="text"
-            autoComplete="name"
-            required
-            value={formData.name}
-            onChange={handleInputChange}
-            className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
-              errors.name ? "border-red-300" : "border-gray-300"
-            }`}
-            placeholder="Enter your full name"
-            disabled={isLoading}
-          />
-          {errors.name && (
-            <p className="mt-1 text-sm text-red-600">{errors.name}</p>
-          )}
-        </div>
-
-        {/* Email field */}
-        <div>
-          <label
-            htmlFor="email"
-            className="block text-sm font-medium text-gray-700"
-          >
-            Email address
-          </label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            required
-            value={formData.email}
-            onChange={handleInputChange}
-            className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
-              errors.email ? "border-red-300" : "border-gray-300"
-            }`}
-            placeholder="Enter your email"
-            disabled={isLoading}
-          />
-          {errors.email && (
-            <p className="mt-1 text-sm text-red-600">{errors.email}</p>
-          )}
-        </div>
-
-        {/* Password field */}
-        <div>
-          <label
-            htmlFor="password"
-            className="block text-sm font-medium text-gray-700"
-          >
-            Password
-          </label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete="new-password"
-            required
-            value={formData.password}
-            onChange={handleInputChange}
-            className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
-              errors.password ? "border-red-300" : "border-gray-300"
-            }`}
-            placeholder="Create a password (min. 6 characters)"
-            disabled={isLoading}
-          />
-          {errors.password && (
-            <p className="mt-1 text-sm text-red-600">{errors.password}</p>
-          )}
-        </div>
-
-        {/* Confirm Password field */}
-        <div>
-          <label
-            htmlFor="confirmPassword"
-            className="block text-sm font-medium text-gray-700"
-          >
-            Confirm Password
-          </label>
-          <input
-            id="confirmPassword"
-            name="confirmPassword"
-            type="password"
-            autoComplete="new-password"
-            required
-            value={formData.confirmPassword}
-            onChange={handleInputChange}
-            className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
-              errors.confirmPassword ? "border-red-300" : "border-gray-300"
-            }`}
-            placeholder="Confirm your password"
-            disabled={isLoading}
-          />
-          {errors.confirmPassword && (
-            <p className="mt-1 text-sm text-red-600">
-              {errors.confirmPassword}
-            </p>
-          )}
-        </div>
-
-        {/* Budget field */}
-        <div>
-          <label
-            htmlFor="budget"
-            className="block text-sm font-medium text-gray-700"
-          >
-            Initial Budget
-          </label>
-          {!showCustomBudget ? (
-            <select
-              id="budget"
-              name="budget"
-              value={formData.budget}
-              onChange={handleBudgetChange}
-              className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
-                errors.budget ? "border-red-300" : "border-gray-300"
-              }`}
-              disabled={isLoading}
-            >
-              {budgetOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <div className="flex gap-2">
-              <input
-                id="budget"
-                name="budget"
-                type="number"
-                min="0"
-                max="50000"
-                step="100"
-                value={formData.budget}
-                onChange={handleInputChange}
-                className={`flex-1 mt-1 block w-full px-3 py-2 border rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
-                  errors.budget ? "border-red-300" : "border-gray-300"
-                }`}
-                placeholder="Enter custom amount"
-                disabled={isLoading}
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  setShowCustomBudget(false);
-                  setFormData((prev) => ({ ...prev, budget: "5000" }));
-                }}
-                className="mt-1 px-3 py-2 text-sm text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200"
-                disabled={isLoading}
-              >
-                Cancel
-              </button>
-            </div>
-          )}
-          {errors.budget && (
-            <p className="mt-1 text-sm text-red-600">{errors.budget}</p>
-          )}
-          <p className="mt-1 text-xs text-gray-500">
-            Don't worry, you can change this later in your profile
-          </p>
-        </div>
-
-        {/* Server error display */}
-        {serverError && (
-          <div className="bg-red-50 border border-red-200 rounded-md p-3">
-            <p className="text-sm text-red-600">{serverError}</p>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Enhanced Success Message */}
+        {success && (
+          <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
+            <CheckCircle size={20} className="text-green-600 flex-shrink-0" />
+            <span className="text-sm text-green-800">{success}</span>
           </div>
         )}
 
-        {/* Submit button */}
+        {/* Enhanced Error Display */}
+        {error && (
+          <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <AlertCircle size={20} className="text-red-600 flex-shrink-0" />
+            <span className="text-sm text-red-800">{error}</span>
+          </div>
+        )}
+
+        {/* Enhanced Name Field */}
+        <div>
+          <label
+            htmlFor="name"
+            className="block text-sm font-medium text-gray-700 mb-2"
+          >
+            Full Name
+          </label>
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <User size={18} className="text-gray-400" />
+            </div>
+            <input
+              id="name"
+              name="name"
+              type="text"
+              autoComplete="name"
+              required
+              value={formData.name}
+              onChange={handleInputChange}
+              className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+              placeholder="Enter your full name"
+              disabled={isLoading}
+            />
+          </div>
+        </div>
+
+        {/* Enhanced Email Field */}
+        <div>
+          <label
+            htmlFor="email"
+            className="block text-sm font-medium text-gray-700 mb-2"
+          >
+            Email address
+          </label>
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Mail size={18} className="text-gray-400" />
+            </div>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              required
+              value={formData.email}
+              onChange={handleInputChange}
+              className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+              placeholder="your@email.com"
+              disabled={isLoading}
+            />
+          </div>
+        </div>
+
+        {/* Enhanced Password Field */}
+        <div>
+          <label
+            htmlFor="password"
+            className="block text-sm font-medium text-gray-700 mb-2"
+          >
+            Password
+          </label>
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Lock size={18} className="text-gray-400" />
+            </div>
+            <input
+              id="password"
+              name="password"
+              type={showPassword ? "text" : "password"}
+              autoComplete="new-password"
+              required
+              value={formData.password}
+              onChange={handleInputChange}
+              className="block w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+              placeholder="Create a secure password"
+              disabled={isLoading}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute inset-y-0 right-0 pr-3 flex items-center"
+            >
+              {showPassword ? (
+                <EyeOff
+                  size={18}
+                  className="text-gray-400 hover:text-gray-600"
+                />
+              ) : (
+                <Eye size={18} className="text-gray-400 hover:text-gray-600" />
+              )}
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-gray-500 flex items-center gap-1">
+            <Info size={12} />
+            Password must be at least 6 characters
+          </p>
+        </div>
+
+        {/* Enhanced Confirm Password Field */}
+        <div>
+          <label
+            htmlFor="confirmPassword"
+            className="block text-sm font-medium text-gray-700 mb-2"
+          >
+            Confirm Password
+          </label>
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Lock size={18} className="text-gray-400" />
+            </div>
+            <input
+              id="confirmPassword"
+              name="confirmPassword"
+              type={showConfirmPassword ? "text" : "password"}
+              autoComplete="new-password"
+              required
+              value={formData.confirmPassword}
+              onChange={handleInputChange}
+              className="block w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+              placeholder="Confirm your password"
+              disabled={isLoading}
+            />
+            <button
+              type="button"
+              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+              className="absolute inset-y-0 right-0 pr-3 flex items-center"
+            >
+              {showConfirmPassword ? (
+                <EyeOff
+                  size={18}
+                  className="text-gray-400 hover:text-gray-600"
+                />
+              ) : (
+                <Eye size={18} className="text-gray-400 hover:text-gray-600" />
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Enhanced Budget Field (Optional) */}
+        <div>
+          <label
+            htmlFor="budget"
+            className="block text-sm font-medium text-gray-700 mb-2"
+          >
+            Budget (Optional)
+          </label>
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <DollarSign size={18} className="text-gray-400" />
+            </div>
+            <input
+              id="budget"
+              name="budget"
+              type="number"
+              min="0"
+              max="9999"
+              step="0.01"
+              value={formData.budget}
+              onChange={handleInputChange}
+              className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+              placeholder="1500.00"
+              disabled={isLoading}
+            />
+          </div>
+          <p className="mt-1 text-xs text-gray-500 flex items-center gap-1">
+            <Info size={12} />
+            Set your PC building budget (max $9,999)
+          </p>
+        </div>
+
+        {/* Enhanced Submit Button */}
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="group relative w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all"
         >
           {isLoading ? (
-            <span className="flex items-center">
-              <svg
-                className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                ></circle>
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                ></path>
-              </svg>
+            <>
+              <Loader2 size={18} className="animate-spin" />
               Creating account...
-            </span>
+            </>
           ) : (
-            "Create account"
+            <>
+              <UserPlus size={18} />
+              Create account
+            </>
           )}
         </button>
 
-        {/* Back to login link */}
+        {/* Enhanced Back to login link */}
         <div className="text-center">
           <button
             type="button"
             onClick={onBackToLogin}
-            className="text-sm text-blue-600 hover:text-blue-500"
+            className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-500 transition-colors"
             disabled={isLoading}
           >
+            <LogIn size={16} />
             Already have an account? Sign in
           </button>
         </div>
