@@ -24,6 +24,8 @@ export interface BuildTemplate {
       features?: string[];
       minSpecs?: Record<string, unknown>;
       maxPrice?: number;
+      fallbackMaxPrice?: number; // Extended budget when primary budget fails
+      budgetFlexibility?: number; // 0-1, how much this component can borrow from others
     };
   };
 }
@@ -34,7 +36,7 @@ export const BUILD_TEMPLATES: BuildTemplate[] = [
     name: "Budget Gaming Build",
     description:
       "Entry-level gaming PC for 1080p gaming at medium-high settings",
-    targetPrice: { min: 600, max: 1000 },
+    targetPrice: { min: 600, max: 1200 },
     category: "budget",
     useCase: ["Gaming", "1080p", "Esports"],
     priority: {
@@ -46,24 +48,29 @@ export const BUILD_TEMPLATES: BuildTemplate[] = [
     componentPreferences: {
       CPU: {
         brands: ["AMD", "Intel"],
-        maxPrice: 200,
+        maxPrice: 280,
+        fallbackMaxPrice: 350,
         minSpecs: { cores: 4, threads: 8 },
       },
       GPU: {
         brands: ["NVIDIA", "AMD"],
-        maxPrice: 300,
+        maxPrice: 380,
+        fallbackMaxPrice: 480,
         features: ["ray_tracing_basic"],
       },
       RAM: {
-        maxPrice: 80,
+        maxPrice: 120,
+        fallbackMaxPrice: 160,
         minSpecs: { capacity: 16, speed: 3200 },
       },
       Motherboard: {
-        maxPrice: 120,
+        maxPrice: 180,
+        fallbackMaxPrice: 220,
         features: ["wifi_optional"],
       },
       PSU: {
-        maxPrice: 80,
+        maxPrice: 120,
+        fallbackMaxPrice: 150,
         minSpecs: { wattage: 500, efficiency: "80_plus" },
       },
     },
@@ -202,10 +209,6 @@ export const BUILD_TEMPLATES: BuildTemplate[] = [
         brands: ["AMD", "Intel"],
         maxPrice: 150,
         minSpecs: { cores: 4, threads: 4 },
-      },
-      GPU: {
-        brands: ["Integrated"],
-        maxPrice: 0, // Integrated graphics
       },
       RAM: {
         maxPrice: 60,
@@ -350,15 +353,16 @@ export const BUILD_TEMPLATES: BuildTemplate[] = [
 ];
 
 /**
- * Enhanced template application with proper data structure handling and error checking
+ * Enhanced template application with complete implementation and error handling
  */
 export function applyBuildTemplate(
   template: BuildTemplate,
   availableComponents: ComponentResponse[] | { data: ComponentResponse[] }
 ): {
-  suggestedBuild: BuildSlots; // Changed from Partial<BuildSlots> for complete builds
+  suggestedBuild: BuildSlots;
   totalPrice: number;
   matchQuality: number; // 0-1 score
+  budgetWarnings: string[]; // New: warnings about budget overruns
 } {
   // Handle both data structures - API response vs direct array
   const components = Array.isArray(availableComponents)
@@ -371,6 +375,7 @@ export function applyBuildTemplate(
       suggestedBuild: {},
       totalPrice: 0,
       matchQuality: 0,
+      budgetWarnings: [],
     };
   }
 
@@ -378,88 +383,207 @@ export function applyBuildTemplate(
   let totalPrice = 0;
   let matchedPreferences = 0;
   let totalPreferences = 0;
+  const budgetWarnings: string[] = [];
+  let remainingBudget = template.targetPrice.max;
 
-  // Helper function to filter and sort components for a type
+  // Enhanced helper function with dynamic budget allocation and fallback pricing
   const getFilteredComponents = (
     type: string,
-    preference?: BuildTemplate["componentPreferences"][keyof BuildTemplate["componentPreferences"]]
+    preference?: BuildTemplate["componentPreferences"][keyof BuildTemplate["componentPreferences"]],
+    allocatedBudget?: number
   ) => {
-    return components
-      .filter((comp) => {
+    const effectiveMaxPrice =
+      allocatedBudget || preference?.maxPrice || template.targetPrice.max;
+    const fallbackMaxPrice =
+      preference?.fallbackMaxPrice || effectiveMaxPrice * 1.5;
+
+    // First pass: try to stay within allocated budget
+    let filteredComponents = components.filter((comp) => {
+      if (comp.type !== type) return false;
+      if (!comp.stockQuantity || comp.stockQuantity <= 0) return false;
+
+      const price = Number(comp.price) || 0;
+
+      // Enhanced filtering logic with minSpecs validation
+      if (preference?.minSpecs) {
+        if (type === "CPU") {
+          const cores = Number((comp as any).cores) || 0;
+          const threads = Number((comp as any).threads) || 0;
+          const minCores = Number(preference.minSpecs.cores) || 0;
+          const minThreads = Number(preference.minSpecs.threads) || 0;
+          if (minCores > 0 && cores < minCores) return false;
+          if (minThreads > 0 && threads < minThreads) return false;
+        }
+
+        if (type === "RAM") {
+          const capacity = Number((comp as any).capacity) || 0;
+          const speed = Number((comp as any).speed) || 0;
+          const minCapacity = Number(preference.minSpecs.capacity) || 0;
+          const minSpeed = Number(preference.minSpecs.speed) || 0;
+          if (minCapacity > 0 && capacity < minCapacity) return false;
+          if (minSpeed > 0 && speed < minSpeed) return false;
+        }
+
+        if (type === "PSU") {
+          const wattage = Number(comp.wattage) || 0;
+          const minWattage = Number(preference.minSpecs.wattage) || 0;
+          if (minWattage > 0 && wattage < minWattage) return false;
+        }
+      }
+
+      return price <= effectiveMaxPrice;
+    });
+
+    // If no components found within budget, try fallback pricing
+    if (filteredComponents.length === 0) {
+      filteredComponents = components.filter((comp) => {
         if (comp.type !== type) return false;
         if (!comp.stockQuantity || comp.stockQuantity <= 0) return false;
 
         const price = Number(comp.price) || 0;
-        if (preference?.maxPrice && price > preference.maxPrice) return false;
-        if (price < template.targetPrice.min * 0.05) return false; // Sanity check - very cheap components
-
-        return true;
-      })
-      .sort((a, b) => {
-        let scoreA = 0;
-        let scoreB = 0;
-
-        // Preferred brands get higher score
-        if (preference?.brands?.includes(a.brand || "")) scoreA += 10;
-        if (preference?.brands?.includes(b.brand || "")) scoreB += 10;
-
-        // Price scoring based on template priority
-        const priceA = Number(a.price) || 0;
-        const priceB = Number(b.price) || 0;
-
-        if (template.priority.budget > template.priority.performance) {
-          // Budget priority: prefer lower prices
-          scoreA += (1 / (priceA + 1)) * 5;
-          scoreB += (1 / (priceB + 1)) * 5;
-        } else {
-          // Performance priority: prefer higher-end (within budget)
-          const maxPrice = preference?.maxPrice || template.targetPrice.max;
-          scoreA += Math.min(priceA / maxPrice, 1) * 5;
-          scoreB += Math.min(priceB / maxPrice, 1) * 5;
-        }
-
-        // Stock quantity consideration - prefer well-stocked items
-        scoreA += Math.min((a.stockQuantity || 0) / 10, 2);
-        scoreB += Math.min((b.stockQuantity || 0) / 10, 2);
-
-        return scoreB - scoreA;
+        return price <= fallbackMaxPrice;
       });
+    }
+
+    return filteredComponents.sort((a, b) => {
+      let scoreA = 0;
+      let scoreB = 0;
+
+      // Preferred brands get higher score
+      if (preference?.brands?.includes(a.brand || "")) scoreA += 10;
+      if (preference?.brands?.includes(b.brand || "")) scoreB += 10;
+
+      // Price scoring based on template priority
+      const priceA = Number(a.price) || 0;
+      const priceB = Number(b.price) || 0;
+
+      if (template.priority.budget > template.priority.performance) {
+        // Budget priority: prefer lower prices
+        scoreA += (1 / (priceA + 1)) * 5;
+        scoreB += (1 / (priceB + 1)) * 5;
+      } else {
+        // Performance priority: prefer higher-end (within budget)
+        scoreA += Math.min(priceA / effectiveMaxPrice, 1) * 5;
+        scoreB += Math.min(priceB / effectiveMaxPrice, 1) * 5;
+      }
+
+      // Stock quantity consideration
+      scoreA += Math.min((a.stockQuantity || 0) / 10, 2);
+      scoreB += Math.min((b.stockQuantity || 0) / 10, 2);
+
+      return scoreB - scoreA;
+    });
   };
 
-  // Select CPU first (most important for compatibility)
+  // Dynamic budget allocation system
+  const allocateBudgetForComponent = (componentType: string): number => {
+    const componentPriorities = {
+      CPU: 0.25,
+      GPU: 0.35,
+      Motherboard: 0.15,
+      RAM: 0.1,
+      PSU: 0.08,
+      Case: 0.05,
+      Cooler: 0.02,
+    } as const;
+
+    const baseBudget =
+      remainingBudget *
+      (componentPriorities[componentType as keyof typeof componentPriorities] ||
+        0.1);
+
+    // Allow borrowing from remaining budget if component is high priority
+    const borrowMultiplier =
+      template.priority.performance > template.priority.budget ? 1.5 : 1.2;
+
+    return Math.min(baseBudget * borrowMultiplier, remainingBudget * 0.6);
+  };
+
+  // Select CPU first (foundation component for compatibility)
   if (template.componentPreferences.CPU) {
+    const allocatedBudget = allocateBudgetForComponent("CPU");
     const cpuOptions = getFilteredComponents(
       "CPU",
-      template.componentPreferences.CPU
+      template.componentPreferences.CPU,
+      allocatedBudget
     );
+
     if (cpuOptions.length > 0) {
-      suggestedBuild.CPU = cpuOptions[0];
-      totalPrice += Number(cpuOptions[0].price) || 0;
+      const selectedCpu = cpuOptions[0];
+      const cpuPrice = Number(selectedCpu.price) || 0;
+
+      suggestedBuild.CPU = selectedCpu;
+      totalPrice += cpuPrice;
+      remainingBudget -= cpuPrice;
       matchedPreferences++;
+
+      // Check for budget warning
+      if (
+        template.componentPreferences.CPU.maxPrice &&
+        cpuPrice > template.componentPreferences.CPU.maxPrice
+      ) {
+        budgetWarnings.push(
+          `CPU exceeds individual budget: ${cpuPrice} > ${template.componentPreferences.CPU.maxPrice}`
+        );
+      }
     }
     totalPreferences++;
   }
 
-  // Select Motherboard (must be compatible with CPU)
+  // Select Motherboard (must be compatible with CPU socket)
   if (template.componentPreferences.Motherboard) {
+    const allocatedBudget = allocateBudgetForComponent("Motherboard");
     const mbOptions = getFilteredComponents(
       "Motherboard",
-      template.componentPreferences.Motherboard
+      template.componentPreferences.Motherboard,
+      allocatedBudget
     );
+
     // Filter by CPU socket compatibility if CPU is selected
     const compatibleMb = suggestedBuild.CPU
       ? mbOptions.filter((mb) => mb.socket === suggestedBuild.CPU?.socket)
       : mbOptions;
 
     if (compatibleMb.length > 0) {
-      suggestedBuild.Motherboard = compatibleMb[0];
-      totalPrice += Number(compatibleMb[0].price) || 0;
+      const selectedMb = compatibleMb[0];
+      const mbPrice = Number(selectedMb.price) || 0;
+
+      suggestedBuild.Motherboard = selectedMb;
+      totalPrice += mbPrice;
+      remainingBudget -= mbPrice;
       matchedPreferences++;
+
+      // Check for budget warning
+      if (
+        template.componentPreferences.Motherboard.maxPrice &&
+        mbPrice > template.componentPreferences.Motherboard.maxPrice
+      ) {
+        budgetWarnings.push(
+          `Motherboard exceeds individual budget: ${mbPrice} > ${template.componentPreferences.Motherboard.maxPrice}`
+        );
+      }
     } else if (mbOptions.length > 0) {
-      // Fallback to any motherboard if no socket match
-      suggestedBuild.Motherboard = mbOptions[0];
-      totalPrice += Number(mbOptions[0].price) || 0;
-      matchedPreferences += 0.5; // Partial match
+      // Fallback to any available motherboard if no socket match found
+      const selectedMb = mbOptions[0];
+      const mbPrice = Number(selectedMb.price) || 0;
+
+      suggestedBuild.Motherboard = selectedMb;
+      totalPrice += mbPrice;
+      remainingBudget -= mbPrice;
+      matchedPreferences += 0.5; // Partial match since socket may not be compatible
+
+      budgetWarnings.push(
+        `Motherboard socket may not match CPU - compatibility issue possible`
+      );
+
+      if (
+        template.componentPreferences.Motherboard.maxPrice &&
+        mbPrice > template.componentPreferences.Motherboard.maxPrice
+      ) {
+        budgetWarnings.push(
+          `Motherboard exceeds individual budget: ${mbPrice} > ${template.componentPreferences.Motherboard.maxPrice}`
+        );
+      }
     }
     totalPreferences++;
   }
@@ -473,7 +597,7 @@ export function applyBuildTemplate(
 
     // Filter by motherboard/CPU compatibility
     const compatibleRam = ramOptions.filter((ram) => {
-      // Check CPU compatibility
+      // Check CPU DDR support
       if (suggestedBuild.CPU?.extraCompatibility) {
         const cpuCompat = suggestedBuild.CPU.extraCompatibility as Record<
           string,
@@ -485,7 +609,7 @@ export function applyBuildTemplate(
           return false;
       }
 
-      // Check motherboard compatibility
+      // Check motherboard RAM type compatibility
       if (
         suggestedBuild.Motherboard?.ramType &&
         suggestedBuild.Motherboard.ramType !== ram.ramType
@@ -497,13 +621,13 @@ export function applyBuildTemplate(
 
     if (compatibleRam.length > 0) {
       const selectedRam = compatibleRam[0];
-      // For higher-end builds, suggest 2 sticks for dual channel
+      // For higher-end builds, suggest 2 sticks for dual channel performance
       const stickCount = template.category === "budget" ? 1 : 2;
       suggestedBuild.RAM = Array(stickCount).fill(selectedRam);
       totalPrice += (Number(selectedRam.price) || 0) * stickCount;
       matchedPreferences++;
     } else if (ramOptions.length > 0) {
-      // Fallback
+      // Fallback to first available RAM (may have compatibility issues)
       const selectedRam = ramOptions[0];
       suggestedBuild.RAM = [selectedRam];
       totalPrice += Number(selectedRam.price) || 0;
@@ -526,7 +650,7 @@ export function applyBuildTemplate(
     totalPreferences++;
   }
 
-  // Select PSU (important for power requirements)
+  // Select PSU (critical for power requirements)
   if (template.componentPreferences.PSU) {
     const psuOptions = getFilteredComponents(
       "PSU",
@@ -566,11 +690,11 @@ export function applyBuildTemplate(
   );
 
   if (caseOptions.length > 0) {
-    // Try to match motherboard form factor if available
+    // Filter by form factor compatibility with motherboard if available
     const compatibleCases = suggestedBuild.Motherboard
       ? caseOptions.filter((caseComp) => {
           if (!caseComp.formFactor || !suggestedBuild.Motherboard?.formFactor)
-            return true;
+            return true; // If form factors aren't specified, assume compatibility
           return isFormFactorCompatible(
             suggestedBuild.Motherboard.formFactor,
             caseComp.formFactor
@@ -584,35 +708,34 @@ export function applyBuildTemplate(
     totalPrice += Number(selectedCase.price) || 0;
   }
 
-  // Select Cooler (with CPU socket compatibility)
+  // Select Cooler (must be compatible with CPU socket)
   const coolerOptions = components.filter(
     (comp) => comp.type === "Cooler" && (comp.stockQuantity || 0) > 0
   );
 
-  if (coolerOptions.length > 0) {
-    // Filter by CPU socket compatibility if available
-    const compatibleCoolers = suggestedBuild.CPU
-      ? coolerOptions.filter((cooler) => {
-          if (!cooler.extraCompatibility?.socket_support) return true;
-          const supportedSockets = cooler.extraCompatibility
-            .socket_support as unknown as string[];
-          return (
-            Array.isArray(supportedSockets) &&
-            supportedSockets.includes(suggestedBuild.CPU?.socket || "")
-          );
-        })
-      : coolerOptions;
+  if (coolerOptions.length > 0 && suggestedBuild.CPU?.socket) {
+    const compatibleCoolers = coolerOptions.filter((cooler) => {
+      const supportedSockets = cooler.extraCompatibility?.socket_support;
+      return (
+        Array.isArray(supportedSockets) &&
+        supportedSockets.includes(suggestedBuild.CPU?.socket || "")
+      );
+    });
 
-    if (compatibleCoolers.length > 0) {
-      suggestedBuild.Cooler = compatibleCoolers[0];
-      totalPrice += Number(compatibleCoolers[0].price) || 0;
-    } else if (coolerOptions.length > 0) {
-      // Fallback to any cooler
-      suggestedBuild.Cooler = coolerOptions[0];
-      totalPrice += Number(coolerOptions[0].price) || 0;
-    }
+    const selectedCooler =
+      compatibleCoolers.length > 0 ? compatibleCoolers[0] : coolerOptions[0];
+    suggestedBuild.Cooler = selectedCooler;
+    totalPrice += Number(selectedCooler.price) || 0;
   }
 
+  // Final budget check and overall warnings
+  if (totalPrice > template.targetPrice.max) {
+    budgetWarnings.push(
+      `Build total (${totalPrice}) exceeds template budget (${template.targetPrice.max})`
+    );
+  }
+
+  // Calculate match quality score
   const matchQuality =
     totalPreferences > 0 ? matchedPreferences / totalPreferences : 0;
 
@@ -621,6 +744,7 @@ export function applyBuildTemplate(
     componentsFound: Object.keys(suggestedBuild).length,
     totalPrice,
     matchQuality,
+    budgetWarnings: budgetWarnings.length,
     suggestedBuild,
   });
 
@@ -628,6 +752,7 @@ export function applyBuildTemplate(
     suggestedBuild,
     totalPrice,
     matchQuality,
+    budgetWarnings,
   };
 }
 
@@ -694,7 +819,7 @@ export function getTemplatesByBudget(maxBudget: number): BuildTemplate[] {
   return BUILD_TEMPLATES.filter(
     (template) =>
       template.targetPrice.min <= maxBudget &&
-      template.targetPrice.min <= maxBudget * 1.2 // Allow some flexibility
+      template.targetPrice.max <= maxBudget * 1.2 // Allow some flexibility
   );
 }
 
