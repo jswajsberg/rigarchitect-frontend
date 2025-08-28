@@ -174,8 +174,12 @@ export const useBuildOperations = ({
       setIsModifyingExisting(true);
 
       const build = savedBuilds.find((b) => b.id === buildId);
-      if (build) {
-        setBuildName(build.name || "");
+      if (build && build.name) {
+        // Ensure clean string handling
+        const cleanName = String(build.name).trim();
+        setBuildName(cleanName);
+      } else {
+        setBuildName("Untitled Build");
       }
     },
     [setSelectedBuildId, setIsModifyingExisting, setBuildName]
@@ -222,12 +226,58 @@ export const useBuildOperations = ({
   );
 
   // Clear build
-  const handleClearBuild = useCallback(() => {
-    setCurrentBuild({});
-    setBuildName("");
-    setSelectedBuildId(null);
-    setIsModifyingExisting(false);
+  const handleClearBuild = useCallback(async () => {
+    const componentCount = Object.keys(currentBuild).length;
+    if (componentCount === 0) {
+      // Nothing to clear
+      return;
+    }
+
+    const isSavedBuild = selectedBuildId && isModifyingExisting;
+    const confirmMessage = isSavedBuild 
+      ? `Are you sure you want to clear this saved build "${buildName}"? This will remove all ${componentCount} components from the saved build and cannot be undone.`
+      : `Are you sure you want to clear this build? This will remove all ${componentCount} selected components and cannot be undone.`;
+
+    const confirmClear = window.confirm(confirmMessage);
+    
+    if (!confirmClear) return;
+
+    try {
+      // If this is a saved build, remove all items from the database
+      if (isSavedBuild && selectedBuildItems?.data) {
+        await Promise.all(
+          selectedBuildItems.data.map((item) =>
+            deleteItemMutation.mutateAsync({ id: item.id! })
+          )
+        );
+
+        // Invalidate queries to refresh UI
+        queryClient.invalidateQueries({
+          queryKey: [`/api/v1/items/cart/${selectedBuildId}`],
+        });
+      }
+
+      // Clear local state
+      setCurrentBuild({});
+      setBuildName("");
+      setSelectedBuildId(null);
+      setIsModifyingExisting(false);
+
+      if (isSavedBuild) {
+        alert(`Saved build "${buildName}" has been cleared of all components.`);
+      }
+    } catch (error: any) {
+      console.error("Failed to clear build:", error);
+      alert("Failed to clear build. Please try again.");
+    }
   }, [
+    currentBuild,
+    selectedBuildId,
+    isModifyingExisting,
+    buildName,
+    selectedBuildItems,
+    deleteItemMutation,
+    queryClient,
     setCurrentBuild,
     setBuildName,
     setSelectedBuildId,
@@ -242,18 +292,26 @@ export const useBuildOperations = ({
         return;
       }
 
+      // Ensure clean string input
+      const cleanBuildName = String(newBuildName).trim();
+      
+      if (!cleanBuildName) {
+        alert("Build name cannot be empty");
+        return;
+      }
+
       try {
         // Create new empty build immediately
         const newBuildResponse = await createCartMutation.mutateAsync({
           userId: selectedUserId,
-          data: { name: newBuildName, status: "ACTIVE" },
+          data: { name: cleanBuildName, status: "ACTIVE" },
         });
 
         const newBuildId = newBuildResponse.data.id!;
 
         // Clear all build state and set up for new build
         setCurrentBuild({});
-        setBuildName(newBuildName);
+        setBuildName(cleanBuildName);
         setSelectedBuildId(newBuildId);
         setIsModifyingExisting(true);
 
@@ -262,7 +320,7 @@ export const useBuildOperations = ({
           queryKey: [`/api/v1/carts/user/${selectedUserId}`],
         });
 
-        alert(`New build "${newBuildName}" created successfully!`);
+        alert(`New build "${cleanBuildName}" created successfully!`);
       } catch (error: any) {
         console.error("Failed to create new build:", error);
         alert(

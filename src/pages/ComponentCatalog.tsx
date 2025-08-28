@@ -645,6 +645,18 @@ const ComponentCatalog: React.FC = () => {
     setShowAdvancedSearch(false);
   };
 
+  // Clear only advanced search filters without closing the section
+  const clearAdvancedFilters = () => {
+    setFilters({
+      type: "",
+      brand: "",
+      compatibilityTag: "",
+      maxPrice: "",
+      minStock: "0",
+    });
+    setInStockOnly(false);
+  };
+
   // SearchBar prop handlers
   const handleSearchTermChange = (value: string) => {
     setSearchTerm(value);
@@ -686,6 +698,7 @@ const ComponentCatalog: React.FC = () => {
           inStockOnly={inStockOnly}
           onInStockOnlyChange={handleInStockOnlyChange}
           componentTypes={componentTypes}
+          onClearAllFilters={clearAdvancedFilters}
           disabled={false}
         />
       </div>
@@ -793,12 +806,8 @@ const ComponentCatalog: React.FC = () => {
           !isLoading &&
           !error && (
             <div className="text-center py-8">
-              <div className="text-gray-600 mb-2">
-                Search for components or browse by type to get started
-              </div>
-              <div className="text-sm text-gray-500">
-                Try search terms like: "mobo", "gfx", "DDR4", "AM4", "ATX", or
-                brand names
+              <div className="text-gray-600">
+                Use the search bar above or browse by component type to get started
               </div>
             </div>
           )}

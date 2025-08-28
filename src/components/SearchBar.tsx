@@ -18,6 +18,7 @@ interface SearchBarProps {
   inStockOnly: boolean;
   onInStockOnlyChange: (value: boolean) => void;
   componentTypes: Array<{ id: string; name: string; description: string }>;
+  onClearAllFilters?: () => void;
   disabled?: boolean;
 }
 
@@ -31,6 +32,7 @@ const SearchBar = ({
   inStockOnly,
   onInStockOnlyChange,
   componentTypes,
+  onClearAllFilters,
   disabled = false,
 }: SearchBarProps) => {
   return (
@@ -159,7 +161,7 @@ const SearchBar = ({
             />
           </div>
 
-          <div className="flex items-end">
+          <div className="flex items-end gap-2">
             <label className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded hover:bg-green-100 h-10">
               <input
                 type="checkbox"
@@ -172,6 +174,15 @@ const SearchBar = ({
                 In Stock Only
               </span>
             </label>
+            {onClearAllFilters && (
+              <button
+                onClick={onClearAllFilters}
+                disabled={disabled}
+                className="px-3 py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded hover:bg-gray-200 disabled:bg-gray-200 disabled:cursor-not-allowed h-10 text-sm font-medium"
+              >
+                Clear All
+              </button>
+            )}
           </div>
         </div>
       )}

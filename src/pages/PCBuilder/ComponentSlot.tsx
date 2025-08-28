@@ -101,7 +101,7 @@ const ComponentSlot: React.FC<ComponentSlotProps> = ({
         <div className="space-y-2">
           {component.map((comp, index) => (
             <div
-              key={comp.id || index}
+              key={`${comp.id}-${index}`}
               className="flex justify-between items-center p-3 bg-gray-100 rounded-lg"
             >
               <div className="flex items-center gap-3">
@@ -114,7 +114,7 @@ const ComponentSlot: React.FC<ComponentSlotProps> = ({
                 </div>
               </div>
               <button
-                onClick={() => onRemove()}
+                onClick={() => onRemove(comp.id)}
                 className="p-1.5 bg-red-100 text-red-600 rounded-lg text-xs hover:bg-red-200 transition-colors"
               >
                 <X size={14} />

@@ -370,7 +370,6 @@ export function applyBuildTemplate(
     : availableComponents?.data || [];
 
   if (!components || components.length === 0) {
-    console.warn("No components available for template application");
     return {
       suggestedBuild: {},
       totalPrice: 0,
@@ -379,7 +378,18 @@ export function applyBuildTemplate(
     };
   }
 
-  const suggestedBuild: BuildSlots = {};
+  // Initialize empty build with all possible component slots to ensure proper clearing
+  const suggestedBuild: BuildSlots = {
+    CPU: undefined,
+    GPU: undefined,
+    Motherboard: undefined,
+    RAM: [], // Array components need empty arrays, not undefined
+    PSU: undefined,
+    SSD: [], // Array components need empty arrays, not undefined
+    HDD: [], // Array components need empty arrays, not undefined
+    Case: undefined,
+    Cooler: undefined,
+  };
   let totalPrice = 0;
   let matchedPreferences = 0;
   let totalPreferences = 0;
@@ -623,17 +633,25 @@ export function applyBuildTemplate(
       const selectedRam = compatibleRam[0];
       // For higher-end builds, suggest 2 sticks for dual channel performance
       const stickCount = template.category === "budget" ? 1 : 2;
-      suggestedBuild.RAM = Array(stickCount).fill(selectedRam);
+      
+      // Create separate component instances to avoid duplicate React keys
+      suggestedBuild.RAM = Array(stickCount).fill(null).map(() => ({ ...selectedRam }));
       totalPrice += (Number(selectedRam.price) || 0) * stickCount;
       matchedPreferences++;
     } else if (ramOptions.length > 0) {
       // Fallback to first available RAM (may have compatibility issues)
       const selectedRam = ramOptions[0];
-      suggestedBuild.RAM = [selectedRam];
+      suggestedBuild.RAM = [{ ...selectedRam }]; // Create copy to avoid reference issues
       totalPrice += Number(selectedRam.price) || 0;
       matchedPreferences += 0.5;
+    } else {
+      // No RAM found - explicitly set to empty array to clear previous RAM
+      suggestedBuild.RAM = [];
     }
     totalPreferences++;
+  } else {
+    // Template has no RAM preferences - explicitly clear RAM
+    suggestedBuild.RAM = [];
   }
 
   // Select GPU (skip for office builds that prefer integrated graphics)
@@ -738,15 +756,6 @@ export function applyBuildTemplate(
   // Calculate match quality score
   const matchQuality =
     totalPreferences > 0 ? matchedPreferences / totalPreferences : 0;
-
-  console.log("Template application result:", {
-    templateName: template.name,
-    componentsFound: Object.keys(suggestedBuild).length,
-    totalPrice,
-    matchQuality,
-    budgetWarnings: budgetWarnings.length,
-    suggestedBuild,
-  });
 
   return {
     suggestedBuild,
