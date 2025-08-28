@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-// src/contexts/CartContext.tsx - Updated to include cart item count
+// src/contexts/CartContext.tsx - Enhanced with warning toast support
 import React, { createContext, useContext, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -21,9 +21,12 @@ interface CartContextType {
   currentCart: BuildCartResponse | null;
   activeCarts: BuildCartResponse[];
   selectedCartId: number | null;
-  shoppingCartItemCount: number; // New: total items in shopping cart
+  shoppingCartItemCount: number;
   addToCart: (component: ComponentResponse, quantity?: number) => Promise<void>;
-  showToast: (message: string, type: "success" | "error" | "info") => void;
+  showToast: (
+    message: string,
+    type: "success" | "error" | "info" | "warning"
+  ) => void;
   selectCart: (cartId: number) => void;
 }
 
@@ -40,7 +43,7 @@ export const useCart = () => {
 interface ToastMessage {
   id: number;
   message: string;
-  type: "success" | "error" | "info";
+  type: "success" | "error" | "info" | "warning";
 }
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
@@ -89,7 +92,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
     setSelectedCartId(cartId);
   };
 
-  const showToast = (message: string, type: "success" | "error" | "info") => {
+  const showToast = (
+    message: string,
+    type: "success" | "error" | "info" | "warning"
+  ) => {
     console.log("📱 Toast:", type, message);
     const id = Date.now() + Math.random();
     setToasts((prev) => [...prev, { id, message, type }]);
@@ -189,7 +195,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
     <CartContext.Provider value={contextValue}>
       {children}
 
-      {/* Toast notifications */}
+      {/* Toast notifications - Enhanced with warning support */}
       <div className="fixed top-4 right-4 space-y-2 z-50">
         {toasts.map((toast) => (
           <div
@@ -199,6 +205,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
                 ? "bg-green-600"
                 : toast.type === "error"
                 ? "bg-red-600"
+                : toast.type === "warning"
+                ? "bg-orange-600"
                 : "bg-blue-600"
             }`}
           >

@@ -4,22 +4,24 @@ React + Vite frontend for creating and managing custom PC builds. Features user 
 
 ## Features
 
-* Connects to the RigArchitect Spring Boot backend API
-* Axios and Orval-generated API clients for type-safe API calls
-* React Query for asynchronous data fetching and caching
-* Tailwind CSS for modern, responsive styling
-* Environment-based API URL configuration
-* React Query Devtools for debugging
+- Connects to the RigArchitect Spring Boot backend API
+- Axios and Orval-generated API clients for type-safe API calls
+- React Query for asynchronous data fetching and caching
+- Tailwind CSS for modern, responsive styling
+- Lucide React icons for consistent, lightweight SVG icons
+- Environment-based API URL configuration
+- React Query Devtools for debugging
 
 ## Tech Stack
 
-* React 18+ with Vite
-* TypeScript
-* Tailwind CSS
-* Axios
-* React Query (`@tanstack/react-query`, `@tanstack/react-query-devtools`)
-* Orval (for OpenAPI client generation)
-* Node.js 18+, npm 9+
+- React 18+ with Vite
+- TypeScript
+- Tailwind CSS
+- Lucide React (icon library)
+- Axios
+- React Query (`@tanstack/react-query`, `@tanstack/react-query-devtools`)
+- Orval (for OpenAPI client generation)
+- Node.js 18+, npm 9+
 
 ## Getting Started
 

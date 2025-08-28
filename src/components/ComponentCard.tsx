@@ -1,9 +1,25 @@
+// src/components/ComponentCard.tsx - Enhanced with Lucide React icons
 import { useState } from "react";
 import type {
   ComponentCardProps,
   StockStatus,
   ComponentDetail,
 } from "../types/component";
+import {
+  Cpu, // CPU
+  Monitor, // GPU
+  HardDrive, // RAM (memory representation)
+  Database, // SSD
+  Archive, // HDD
+  CircuitBoard, // Motherboard
+  Zap, // PSU
+  Box, // Case
+  Wind, // Cooler
+  ChevronDown, // Expand indicator
+  ChevronUp, // Collapse indicator
+  ShoppingCart, // Add to cart
+  Wrench, // Add to build
+} from "lucide-react";
 
 const ComponentCard = ({
   component,
@@ -38,27 +54,36 @@ const ComponentCard = ({
   };
 
   const getComponentTypeIcon = (type?: string) => {
-    const icons: { [key: string]: string } = {
-      CPU: "🔧",
-      GPU: "🎮",
-      RAM: "💾",
-      SSD: "💿",
-      HDD: "🗄️",
-      Motherboard: "🔌",
-      PSU: "⚡",
-      Case: "📦",
-      Cooler: "❄️",
+    // Map component types to their respective Lucide icons with colors
+    const iconConfig: {
+      [key: string]: {
+        icon: React.ComponentType<{ size?: number; className?: string }>;
+        colorClass: string;
+      };
+    } = {
+      CPU: { icon: Cpu, colorClass: "text-blue-600" }, // Blue - processing/logic
+      GPU: { icon: Monitor, colorClass: "text-purple-600" }, // Purple - graphics/visual
+      RAM: { icon: HardDrive, colorClass: "text-green-600" }, // Green - memory/data
+      SSD: { icon: Database, colorClass: "text-cyan-600" }, // Cyan - fast storage
+      HDD: { icon: Archive, colorClass: "text-orange-600" }, // Orange - traditional storage
+      Motherboard: { icon: CircuitBoard, colorClass: "text-emerald-600" }, // Emerald - foundation
+      PSU: { icon: Zap, colorClass: "text-yellow-600" }, // Yellow - power/energy
+      Case: { icon: Box, colorClass: "text-gray-600" }, // Gray - neutral enclosure
+      Cooler: { icon: Wind, colorClass: "text-sky-600" }, // Sky blue - cooling/air
     };
-    return icons[type || ""] || "🔧";
+
+    return iconConfig[type || ""] || { icon: Cpu, colorClass: "text-gray-600" };
   };
 
   const stockStatus = getStockStatus(component.stockQuantity);
+  const iconConfig = getComponentTypeIcon(component.type);
+  const IconComponent = iconConfig.icon;
 
   // Organize component details by relevance to component type
   const getRelevantDetails = (): ComponentDetail[] => {
     const details: ComponentDetail[] = [];
 
-    // Type-specific important details
+    // Type-specific important details for quick view
     switch (component.type) {
       case "CPU":
         if (component.socket)
@@ -95,6 +120,12 @@ const ComponentCard = ({
             value: component.ramType,
             important: true,
           });
+        if ((component as any).ramCapacity)
+          details.push({
+            label: "Capacity",
+            value: `${(component as any).ramCapacity}GB`,
+            important: true,
+          });
         break;
       case "Motherboard":
         if (component.socket)
@@ -126,14 +157,16 @@ const ComponentCard = ({
         break;
       case "SSD":
       case "HDD":
-        // Storage capacity info would be in extraCompatibility or compatibilityTag
-        if (
-          component.compatibilityTag &&
-          component.compatibilityTag.includes("GB")
-        )
+        if ((component as any).capacity)
           details.push({
             label: "Capacity",
-            value: component.compatibilityTag,
+            value: (component as any).capacity,
+            important: true,
+          });
+        if (component.formFactor)
+          details.push({
+            label: "Form Factor",
+            value: component.formFactor,
             important: true,
           });
         break;
@@ -146,6 +179,12 @@ const ComponentCard = ({
           });
         break;
       case "Cooler":
+        if (component.socket)
+          details.push({
+            label: "Socket",
+            value: component.socket,
+            important: true,
+          });
         if (component.coolerHeightMm)
           details.push({
             label: "Height",
@@ -155,17 +194,32 @@ const ComponentCard = ({
         break;
     }
 
+    // Add compatibility tag if available and not already shown
+    if (
+      component.compatibilityTag &&
+      !details.some((d) => d.value === component.compatibilityTag)
+    ) {
+      details.push({
+        label: "Compatibility",
+        value: component.compatibilityTag,
+        important: false,
+      });
+    }
+
     return details;
   };
 
+  // All details for expanded view
   const getAllDetails = (): ComponentDetail[] => {
     const allDetails: ComponentDetail[] = [
+      { label: "Brand", value: component.brand },
+      { label: "Type", value: component.type },
+      { label: "Compatibility Tag", value: component.compatibilityTag },
       { label: "Socket", value: component.socket },
       { label: "RAM Type", value: component.ramType },
       { label: "Form Factor", value: component.formFactor },
-      { label: "Compatibility", value: component.compatibilityTag },
       {
-        label: "Wattage",
+        label: "Power Consumption",
         value: component.wattage ? `${component.wattage}W` : undefined,
       },
       {
@@ -194,9 +248,10 @@ const ComponentCard = ({
       <div className="p-5 flex-1 flex flex-col">
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">
-              {getComponentTypeIcon(component.type)}
-            </span>
+            {/* Enhanced component type icon with color */}
+            <div className="flex-shrink-0">
+              <IconComponent size={28} className={iconConfig.colorClass} />
+            </div>
             <div className="min-w-0 flex-1">
               <h3 className="font-semibold text-lg text-gray-900 break-words">
                 {component.name || "Unnamed Component"}
@@ -226,15 +281,15 @@ const ComponentCard = ({
                 key={index}
                 className={`text-xs px-2 py-1 rounded ${
                   detail.important
-                    ? "bg-blue-100 text-blue-700 font-medium"
-                    : "bg-gray-100 text-gray-600"
+                    ? "bg-blue-100 text-blue-800"
+                    : "bg-gray-100 text-gray-700"
                 }`}
               >
                 {detail.label}: {detail.value}
               </span>
             ))}
-            {relevantDetails.length > 3 && !isExpanded && (
-              <span className="text-xs text-gray-500">
+            {relevantDetails.length > 3 && (
+              <span className="text-xs text-gray-500 px-1">
                 +{relevantDetails.length - 3} more
               </span>
             )}
@@ -242,44 +297,43 @@ const ComponentCard = ({
         )}
 
         {/* Spacer to push buttons to bottom */}
-        <div className="flex-1"></div>
+        <div className="flex-1" />
 
-        {/* Action Buttons - Always at bottom */}
-        <div className="flex flex-col gap-3 mt-auto">
-          {/* Show Details Button */}
-          <div className="flex justify-start">
-            <button
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
-            >
-              {isExpanded ? "Show Less" : "Show Details"}
-              <span className="text-xs">{isExpanded ? "▲" : "▼"}</span>
-            </button>
-          </div>
+        {/* Action Buttons */}
+        <div className="space-y-3">
+          {/* View Details Toggle */}
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <span className="text-sm font-medium">
+              {isExpanded ? "Hide Details" : "View Details"}
+            </span>
+            {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </button>
 
           {/* Cart Action Buttons */}
           {showCartButtons && (
-            <div className="flex gap-3">
+            <div className="flex gap-2">
               {onAddToBuildCart && (
                 <button
                   onClick={() => onAddToBuildCart(component)}
-                  disabled={
-                    !component.stockQuantity || component.stockQuantity <= 0
-                  }
-                  className="flex-1 px-4 py-2 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                  disabled={stockStatus.text === "Out of stock"}
+                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-300 disabled:cursor-not-allowed transition-colors"
                 >
-                  Add to Build
+                  <Wrench size={16} />
+                  <span className="text-sm font-medium">Add to Build</span>
                 </button>
               )}
+
               {onAddToCheckoutCart && (
                 <button
                   onClick={() => onAddToCheckoutCart(component)}
-                  disabled={
-                    !component.stockQuantity || component.stockQuantity <= 0
-                  }
-                  className="flex-1 px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                  disabled={stockStatus.text === "Out of stock"}
+                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                 >
-                  Buy Now
+                  <ShoppingCart size={16} />
+                  <span className="text-sm font-medium">Buy Now</span>
                 </button>
               )}
             </div>

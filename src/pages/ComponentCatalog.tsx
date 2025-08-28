@@ -1,40 +1,69 @@
-// src/pages/ComponentCatalog.tsx - Updated with shopping cart integration
+// src/pages/ComponentCatalog.tsx - Enhanced with component type icons
 import React, { useState, useMemo } from "react";
-import type { ComponentResponse } from "../api/model";
-import SearchBar from "../components/SearchBar";
-import ComponentCard from "../components/ComponentCard";
-import QuantityModal from "../modals/QuantityModal";
-import BuildSelectionModal from "../modals/BuildSelectionModal";
-import type { SearchFilters } from "../components/SearchBar";
 import { useSelectedUserId } from "../contexts/UserContext";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetAllComponents,
   useGetComponentsByType,
 } from "../api/component-controller/component-controller";
+import { useCreateItem } from "../api/cart-item-controller/cart-item-controller";
 import {
   useGetUserCarts,
   useCreateCartForUser,
 } from "../api/build-cart-controller/build-cart-controller";
-import { useCreateItem } from "../api/cart-item-controller/cart-item-controller";
+import type { ComponentResponse, CartItemRequest } from "../api/model";
+import ComponentCard from "../components/ComponentCard";
+import SearchBar from "../components/SearchBar";
+import QuantityModal from "../modals/QuantityModal";
+import BuildSelectionModal from "../modals/BuildSelectionModal";
 import { determineSearchStrategy } from "../utils/searchStrategy";
-import type { CartItemRequest } from "../api/model";
+import { useCart } from "../contexts/CartContext";
+import type { SearchFilters } from "../components/SearchBar";
+
+// Lucide React icon imports for component categories
+import {
+  Cpu, // CPU
+  Monitor, // GPU
+  HardDrive, // RAM (memory stick representation)
+  Database, // SSD
+  Archive, // HDD
+  CircuitBoard, // Motherboard
+  Zap, // PSU
+  Box, // Case
+  Wind, // Cooler
+} from "lucide-react";
 
 const ComponentCatalog: React.FC = () => {
-  const [selectedType, setSelectedType] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState<string>("");
-  const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
   const selectedUserId = useSelectedUserId();
   const queryClient = useQueryClient();
+  const { showToast } = useCart();
+
+  // Local state for search and filtering
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
+  const [selectedType, setSelectedType] = useState<string | null>(null);
+
+  // Mutation for creating cart items
   const createItemMutation = useCreateItem();
   const createCartMutation = useCreateCartForUser();
 
-  // Fetch user's carts for build selection and shopping cart
+  // Get available builds for the user (ACTIVE status only)
   const { data: userCarts, isLoading: buildsLoading } = useGetUserCarts(
     selectedUserId || 0,
     {
       query: { enabled: !!selectedUserId },
     }
+  );
+
+  const availableBuilds = useMemo(
+    () => userCarts?.data?.filter((cart) => cart.status === "ACTIVE") || [],
+    [userCarts]
+  );
+
+  // Get shopping cart (DRAFT status)
+  const shoppingCart = useMemo(
+    () => userCarts?.data?.find((cart) => cart.status === "DRAFT") || null,
+    [userCarts]
   );
 
   // Modal state for quantity selection (shopping cart)
@@ -67,17 +96,62 @@ const ComponentCatalog: React.FC = () => {
   });
   const [inStockOnly, setInStockOnly] = useState(false);
 
-  // Define component types
+  // Component types with associated icons - centralized for consistency
   const componentTypes = [
-    { id: "CPU", name: "CPU", description: "Processors and chips" },
-    { id: "GPU", name: "GPU", description: "Graphics cards" },
-    { id: "RAM", name: "RAM", description: "Memory modules" },
-    { id: "SSD", name: "SSD", description: "Solid state drives" },
-    { id: "HDD", name: "HDD", description: "Hard disk drives" },
-    { id: "Motherboard", name: "Motherboard", description: "Main boards" },
-    { id: "PSU", name: "PSU", description: "Power supplies" },
-    { id: "Case", name: "Case", description: "PC cases" },
-    { id: "Cooler", name: "Cooler", description: "CPU coolers" },
+    {
+      id: "CPU",
+      name: "CPU",
+      description: "Processors and chips",
+      icon: Cpu,
+    },
+    {
+      id: "GPU",
+      name: "GPU",
+      description: "Graphics cards",
+      icon: Monitor,
+    },
+    {
+      id: "RAM",
+      name: "RAM",
+      description: "Memory modules",
+      icon: HardDrive,
+    },
+    {
+      id: "SSD",
+      name: "SSD",
+      description: "Solid state drives",
+      icon: Database,
+    },
+    {
+      id: "HDD",
+      name: "HDD",
+      description: "Hard disk drives",
+      icon: Archive,
+    },
+    {
+      id: "Motherboard",
+      name: "Motherboard",
+      description: "Main boards",
+      icon: CircuitBoard,
+    },
+    {
+      id: "PSU",
+      name: "PSU",
+      description: "Power supplies",
+      icon: Zap,
+    },
+    {
+      id: "Case",
+      name: "Case",
+      description: "PC cases",
+      icon: Box,
+    },
+    {
+      id: "Cooler",
+      name: "Cooler",
+      description: "CPU coolers",
+      icon: Wind,
+    },
   ];
 
   // Fetch all components
@@ -107,35 +181,17 @@ const ComponentCatalog: React.FC = () => {
     isLoading: isTypeSearchLoading,
     error: typeSearchError,
   } = useGetComponentsByType(
-    searchStrategy?.strategy === "type" ? (searchStrategy.params as any) : null,
+    searchStrategy?.strategy === "type"
+      ? (searchStrategy.params as any)
+      : ("CPU" as any),
     {
-      query: { enabled: searchStrategy?.strategy === "type" },
+      query: {
+        enabled: searchStrategy?.strategy === "type",
+      },
     }
   );
 
-  // Get user's shopping cart (DRAFT status) and builds (ACTIVE status)
-  const shoppingCart = useMemo(
-    () => userCarts?.data?.find((cart) => cart.status === "DRAFT") || null,
-    [userCarts]
-  );
-
-  const availableBuilds = useMemo(
-    () => userCarts?.data?.filter((cart) => cart.status === "ACTIVE") || [],
-    [userCarts]
-  );
-
-  // Utility function to show toast messages
-  const showToast = (
-    message: string,
-    type: "success" | "error" | "info" = "info"
-  ) => {
-    // Simple alert for now - could be replaced with actual toast system later
-    if (type === "error") {
-      alert(`Error: ${message}`);
-    } else {
-      alert(message);
-    }
-  };
+  // Helper function to get component count for each type
 
   // Auto-create shopping cart if it doesn't exist
   const ensureShoppingCart = async () => {
@@ -165,12 +221,12 @@ const ComponentCatalog: React.FC = () => {
     }
   };
 
-  const getComponentCount = (type: string): number => {
-    if (!components?.data || !Array.isArray(components.data)) return 0;
-    return components.data.filter((c: ComponentResponse) => c.type === type)
-      .length;
+  const getComponentCount = (typeId: string) => {
+    if (!components?.data) return 0;
+    return components.data.filter((c) => c.type === typeId).length;
   };
 
+  // Event handlers
   const handleBrowseType = (typeId: string) => {
     setSelectedType(selectedType === typeId ? null : typeId);
     setSearchTerm("");
@@ -235,6 +291,55 @@ const ComponentCatalog: React.FC = () => {
     });
   };
 
+  // Handle quantity confirmation for shopping cart
+  const handleQuantityConfirm = async (quantity: number) => {
+    if (!quantityModal.component || !selectedUserId) {
+      showToast("Error: Missing component or user selection", "error");
+      return;
+    }
+
+    const component = quantityModal.component;
+
+    try {
+      // Ensure shopping cart exists
+      let targetCart = shoppingCart;
+      if (!targetCart) {
+        targetCart = await ensureShoppingCart();
+        if (!targetCart) return; // Failed to create cart
+      }
+
+      const cartItemRequest: CartItemRequest = {
+        cartId: targetCart.id!, // Use actual shopping cart ID
+        componentId: component.id!,
+        quantity,
+      };
+
+      await createItemMutation.mutateAsync({ data: cartItemRequest });
+
+      // Refresh cart data
+      queryClient.invalidateQueries({
+        queryKey: [`/api/v1/carts/user/${selectedUserId}`],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/v1/items/cart/${targetCart.id}`],
+      });
+
+      showToast(
+        `Added ${quantity}x ${component.name} to shopping cart! 
+Go to Shopping Cart to checkout.`,
+        "success"
+      );
+    } catch (error: any) {
+      console.error("Failed to add component to shopping cart:", error);
+      showToast(
+        `Failed to add component: ${
+          error.response?.data?.message || error.message
+        }`,
+        "error"
+      );
+    }
+  };
+
   // Handle adding component to multiple builds
   const handleBuildSelectionConfirm = async (
     selectedBuildIds: number[],
@@ -282,7 +387,7 @@ const ComponentCatalog: React.FC = () => {
       showToast(
         `Added ${component.name} to ${successCount} build${
           successCount !== 1 ? "s" : ""
-        } (Qty: ${quantity} each)`,
+        }!`,
         "success"
       );
     } else if (successCount > 0 && failCount > 0) {
@@ -290,55 +395,10 @@ const ComponentCatalog: React.FC = () => {
         `Added to ${successCount} build${
           successCount !== 1 ? "s" : ""
         }, failed for ${failCount}`,
-        "error"
+        "warning"
       );
     } else {
-      showToast(`Failed to add component to any builds`, "error");
-    }
-  };
-
-  // Handle quantity confirmation (for shopping cart)
-  const handleQuantityConfirm = async (quantity: number) => {
-    if (!quantityModal.component || !selectedUserId) return;
-
-    const component = quantityModal.component;
-
-    try {
-      // Ensure shopping cart exists
-      let targetCart = shoppingCart;
-      if (!targetCart) {
-        targetCart = await ensureShoppingCart();
-        if (!targetCart) return; // Failed to create cart
-      }
-
-      const cartItemRequest: CartItemRequest = {
-        cartId: targetCart.id!,
-        componentId: component.id!,
-        quantity,
-      };
-
-      await createItemMutation.mutateAsync({ data: cartItemRequest });
-
-      // Refresh cart data
-      queryClient.invalidateQueries({
-        queryKey: [`/api/v1/carts/user/${selectedUserId}`],
-      });
-      queryClient.invalidateQueries({
-        queryKey: [`/api/v1/items/cart/${targetCart.id}`],
-      });
-
-      showToast(
-        `${component.name} added to shopping cart! Go to Shopping Cart to checkout.`,
-        "success"
-      );
-    } catch (error: any) {
-      console.error("Failed to add component to shopping cart:", error);
-      showToast(
-        `Failed to add component: ${
-          error.response?.data?.message || error.message
-        }`,
-        "error"
-      );
+      showToast("Failed to add component to any builds", "error");
     }
   };
 
@@ -397,19 +457,13 @@ const ComponentCatalog: React.FC = () => {
           }
 
           if ((searchStrategy.params as any).compatibilityTag) {
-            results = results.filter((c: ComponentResponse) => {
-              const searchTag = (
-                searchStrategy.params as any
-              ).compatibilityTag.toLowerCase();
-
-              return (
-                c.compatibilityTag?.toLowerCase().includes(searchTag) ||
-                c.socket?.toLowerCase().includes(searchTag) ||
-                c.formFactor?.toLowerCase().includes(searchTag) ||
-                c.ramType?.toLowerCase().includes(searchTag) ||
-                c.psuFormFactor?.toLowerCase().includes(searchTag)
-              );
-            });
+            results = results.filter((c: ComponentResponse) =>
+              c.compatibilityTag
+                ?.toLowerCase()
+                .includes(
+                  (searchStrategy.params as any).compatibilityTag.toLowerCase()
+                )
+            );
           }
 
           if ((searchStrategy.params as any).maxPrice) {
@@ -423,8 +477,11 @@ const ComponentCatalog: React.FC = () => {
             }
           }
 
-          if ((searchStrategy.params as any).minStock) {
-            const minStock = parseInt((searchStrategy.params as any).minStock);
+          if ((searchStrategy.params as any).minStock !== "0") {
+            const minStock = parseInt(
+              (searchStrategy.params as any).minStock,
+              10
+            );
             if (!isNaN(minStock)) {
               results = results.filter(
                 (c: ComponentResponse) => (c.stockQuantity || 0) >= minStock
@@ -438,11 +495,10 @@ const ComponentCatalog: React.FC = () => {
           break;
 
         case "general":
+          const searchTermLower = searchTerm.toLowerCase();
           results = components?.data || [];
-          const searchTermLower = (
-            searchStrategy.params as string
-          ).toLowerCase();
 
+          // Filter by searchable fields
           results = results.filter((c: ComponentResponse) => {
             const searchableFields = [
               c.name,
@@ -536,28 +592,45 @@ const ComponentCatalog: React.FC = () => {
         />
       </div>
 
-      {/* Browse by Type */}
+      {/* Browse by Type - Enhanced with Icons */}
       {!searchTerm && !showAdvancedSearch && !inStockOnly && (
         <div className="mb-8">
           <h2 className="text-xl font-semibold mb-4">Browse by Type</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-            {componentTypes.map((type) => (
-              <button
-                key={type.id}
-                onClick={() => handleBrowseType(type.id)}
-                className={`p-4 rounded-lg border text-left transition-colors ${
-                  selectedType === type.id
-                    ? "bg-blue-50 border-blue-300 text-blue-800"
-                    : "bg-white border-gray-300 hover:bg-gray-50"
-                }`}
-              >
-                <div className="font-medium">{type.name}</div>
-                <div className="text-sm text-gray-600">{type.description}</div>
-                <div className="text-xs text-gray-500 mt-1">
-                  {getComponentCount(type.id)} available
-                </div>
-              </button>
-            ))}
+            {componentTypes.map((type) => {
+              const IconComponent = type.icon;
+              return (
+                <button
+                  key={type.id}
+                  onClick={() => handleBrowseType(type.id)}
+                  className={`p-4 rounded-lg border text-left transition-colors ${
+                    selectedType === type.id
+                      ? "bg-blue-50 border-blue-300 text-blue-800"
+                      : "bg-white border-gray-300 hover:bg-gray-50"
+                  }`}
+                >
+                  <div className="flex items-start space-x-3">
+                    <IconComponent
+                      size={24}
+                      className={`flex-shrink-0 mt-0.5 ${
+                        selectedType === type.id
+                          ? "text-blue-600"
+                          : "text-gray-600"
+                      }`}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium">{type.name}</div>
+                      <div className="text-sm text-gray-600">
+                        {type.description}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {getComponentCount(type.id)} available
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
