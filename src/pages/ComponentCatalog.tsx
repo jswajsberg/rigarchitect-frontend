@@ -1,4 +1,4 @@
-// src/pages/ComponentCatalog.tsx - Enhanced with component type icons
+// src/pages/ComponentCatalog.tsx - Fixed version with proper prop handling
 import React, { useState, useMemo } from "react";
 import { useSelectedUserId } from "../contexts/UserContext";
 import { useQueryClient } from "@tanstack/react-query";
@@ -6,16 +6,25 @@ import {
   useGetAllComponents,
   useGetComponentsByType,
 } from "../api/component-controller/component-controller";
-import { useCreateItem } from "../api/cart-item-controller/cart-item-controller";
+import {
+  useCreateItem,
+  useDeleteItem,
+  getItemsByCart,
+} from "../api/cart-item-controller/cart-item-controller";
 import {
   useGetUserCarts,
   useCreateCartForUser,
 } from "../api/build-cart-controller/build-cart-controller";
-import type { ComponentResponse, CartItemRequest } from "../api/model";
+import type {
+  ComponentResponse,
+  CartItemRequest,
+  CartItemResponse,
+} from "../api/model";
 import ComponentCard from "../components/ComponentCard";
 import SearchBar from "../components/SearchBar";
 import QuantityModal from "../modals/QuantityModal";
 import BuildSelectionModal from "../modals/BuildSelectionModal";
+import ComponentReplacementModal from "../modals/ComponentReplacementModal";
 import { determineSearchStrategy } from "../utils/searchStrategy";
 import { useCart } from "../contexts/CartContext";
 import type { SearchFilters } from "../components/SearchBar";
@@ -43,8 +52,9 @@ const ComponentCatalog: React.FC = () => {
   const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
   const [selectedType, setSelectedType] = useState<string | null>(null);
 
-  // Mutation for creating cart items
+  // Mutations for creating/deleting cart items
   const createItemMutation = useCreateItem();
+  const deleteItemMutation = useDeleteItem();
   const createCartMutation = useCreateCartForUser();
 
   // Get available builds for the user (ACTIVE status only)
@@ -84,6 +94,23 @@ const ComponentCatalog: React.FC = () => {
   }>({
     isOpen: false,
     component: null,
+  });
+
+  // State for component replacement modal
+  const [replacementModal, setReplacementModal] = useState<{
+    isOpen: boolean;
+    buildId: number | null;
+    buildName: string;
+    currentComponent: ComponentResponse | null;
+    newComponent: ComponentResponse | null;
+    quantity: number;
+  }>({
+    isOpen: false,
+    buildId: null,
+    buildName: "",
+    currentComponent: null,
+    newComponent: null,
+    quantity: 1,
   });
 
   // Advanced search filters
@@ -155,45 +182,113 @@ const ComponentCatalog: React.FC = () => {
   ];
 
   // Fetch all components
-  const { data: components, isLoading, error, refetch } = useGetAllComponents();
+  const {
+    data: allComponents,
+    isLoading,
+    error,
+    refetch,
+  } = useGetAllComponents();
 
   // Fetch components of selected type
   const { data: typeComponents, error: typeError } = useGetComponentsByType(
     selectedType as any,
     {
-      query: { enabled: !!selectedType && !searchTerm && !showAdvancedSearch },
+      query: { enabled: !!selectedType },
     }
   );
 
-  // Determine search strategy using the utility
-  const searchStrategy = useMemo(() => {
-    return determineSearchStrategy(
-      searchTerm,
-      showAdvancedSearch,
-      filters,
-      componentTypes
-    );
-  }, [searchTerm, showAdvancedSearch, filters, componentTypes]);
+  // Search and filter logic
+  const displayedComponents = useMemo(() => {
+    let components: ComponentResponse[] = [];
 
-  // Type search (reuse existing hook)
-  const {
-    data: typeSearchResults,
-    isLoading: isTypeSearchLoading,
-    error: typeSearchError,
-  } = useGetComponentsByType(
-    searchStrategy?.strategy === "type"
-      ? (searchStrategy.params as any)
-      : ("CPU" as any),
-    {
-      query: {
-        enabled: searchStrategy?.strategy === "type",
-      },
+    // Determine which components to use
+    if (selectedType && typeComponents?.data) {
+      components = typeComponents.data;
+    } else if (allComponents?.data) {
+      components = allComponents.data;
     }
-  );
 
-  // Helper function to get component count for each type
+    // Apply search term filter
+    if (searchTerm.trim()) {
+      const strategy = determineSearchStrategy(
+        searchTerm,
+        showAdvancedSearch,
+        filters,
+        componentTypes
+      );
+      const expandedTerm = strategy?.expandedTerm || searchTerm;
+      const lowerSearchTerm = expandedTerm.toLowerCase();
 
-  // Auto-create shopping cart if it doesn't exist
+      components = components.filter((component) => {
+        const searchableFields = [
+          component.name,
+          component.brand,
+          component.type,
+          component.compatibilityTag, // Fixed: using compatibilityTag instead of compatibilityTags
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        return searchableFields.includes(lowerSearchTerm);
+      });
+    }
+
+    // Apply advanced filters
+    if (filters.type) {
+      components = components.filter((c) => c.type === filters.type);
+    }
+    if (filters.brand) {
+      components = components.filter((c) =>
+        c.brand?.toLowerCase().includes(filters.brand.toLowerCase())
+      );
+    }
+    if (filters.compatibilityTag) {
+      components = components.filter(
+        (c) =>
+          c.compatibilityTag
+            ?.toLowerCase()
+            .includes(filters.compatibilityTag.toLowerCase()) // Fixed: using single compatibilityTag
+      );
+    }
+    if (filters.maxPrice) {
+      const maxPrice = parseFloat(filters.maxPrice);
+      components = components.filter((c) => (c.price || 0) <= maxPrice);
+    }
+    if (filters.minStock) {
+      const minStock = parseInt(filters.minStock);
+      components = components.filter((c) => (c.stockQuantity || 0) >= minStock);
+    }
+    if (inStockOnly) {
+      components = components.filter((c) => (c.stockQuantity || 0) > 0);
+    }
+
+    return components;
+  }, [
+    allComponents,
+    typeComponents,
+    selectedType,
+    searchTerm,
+    filters,
+    inStockOnly,
+    showAdvancedSearch,
+    componentTypes,
+  ]);
+
+  const searchStrategy = searchTerm.trim()
+    ? determineSearchStrategy(
+        searchTerm,
+        showAdvancedSearch,
+        filters,
+        componentTypes
+      )
+    : null;
+
+  // Loading states
+  const isSearchLoading = selectedType ? false : isLoading;
+  const searchError = selectedType ? typeError : error;
+
+  // Ensure shopping cart exists
   const ensureShoppingCart = async () => {
     if (shoppingCart || !selectedUserId) return shoppingCart;
 
@@ -203,7 +298,6 @@ const ComponentCatalog: React.FC = () => {
         data: { name: "Shopping Cart", status: "DRAFT" },
       });
 
-      // Invalidate queries to refresh cart data
       queryClient.invalidateQueries({
         queryKey: [`/api/v1/carts/user/${selectedUserId}`],
       });
@@ -221,69 +315,25 @@ const ComponentCatalog: React.FC = () => {
     }
   };
 
-  const getComponentCount = (typeId: string) => {
-    if (!components?.data) return 0;
-    return components.data.filter((c) => c.type === typeId).length;
-  };
-
-  // Event handlers
-  const handleBrowseType = (typeId: string) => {
-    setSelectedType(selectedType === typeId ? null : typeId);
-    setSearchTerm("");
-    setShowAdvancedSearch(false);
-    setInStockOnly(false);
-  };
-
-  const handleSimpleSearch = (value: string) => {
-    setSearchTerm(value);
-    if (value) {
-      setSelectedType(null);
-      setShowAdvancedSearch(false);
-    }
-  };
-
-  const handleAdvancedSearch = () => {
-    setShowAdvancedSearch(!showAdvancedSearch);
-    setSearchTerm("");
-    setSelectedType(null);
-    setInStockOnly(false);
-  };
-
-  const handleFilterChange = (key: string, value: string) => {
-    setFilters((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const handleInStockOnlyChange = (value: boolean) => {
-    setInStockOnly(value);
-    if (value) {
-      setSearchTerm("");
-      setSelectedType(null);
-      setShowAdvancedSearch(false);
-    }
-  };
-
-  // Cart handlers - Updated for new shopping cart system
-  const handleAddToBuildCart = async (component: ComponentResponse) => {
+  // Component action handlers
+  const handleAddToBuildCart = (component: ComponentResponse) => {
     if (!selectedUserId) {
       showToast("Please select a user first!", "error");
       return;
     }
 
-    // Open the build selection modal
     setBuildSelectionModal({
       isOpen: true,
       component,
     });
   };
 
-  // Updated: Add directly to shopping cart (DRAFT BuildCart)
   const handleAddToCheckoutCart = async (component: ComponentResponse) => {
     if (!selectedUserId) {
       showToast("Please select a user first!", "error");
       return;
     }
 
-    // Open quantity modal for shopping cart
     setQuantityModal({
       isOpen: true,
       component,
@@ -291,56 +341,12 @@ const ComponentCatalog: React.FC = () => {
     });
   };
 
-  // Handle quantity confirmation for shopping cart
-  const handleQuantityConfirm = async (quantity: number) => {
-    if (!quantityModal.component || !selectedUserId) {
-      showToast("Error: Missing component or user selection", "error");
-      return;
-    }
-
-    const component = quantityModal.component;
-
-    try {
-      // Ensure shopping cart exists
-      let targetCart = shoppingCart;
-      if (!targetCart) {
-        targetCart = await ensureShoppingCart();
-        if (!targetCart) return; // Failed to create cart
-      }
-
-      const cartItemRequest: CartItemRequest = {
-        cartId: targetCart.id!, // Use actual shopping cart ID
-        componentId: component.id!,
-        quantity,
-      };
-
-      await createItemMutation.mutateAsync({ data: cartItemRequest });
-
-      // Refresh cart data
-      queryClient.invalidateQueries({
-        queryKey: [`/api/v1/carts/user/${selectedUserId}`],
-      });
-      queryClient.invalidateQueries({
-        queryKey: [`/api/v1/items/cart/${targetCart.id}`],
-      });
-
-      showToast(
-        `Added ${quantity}x ${component.name} to shopping cart! 
-Go to Shopping Cart to checkout.`,
-        "success"
-      );
-    } catch (error: any) {
-      console.error("Failed to add component to shopping cart:", error);
-      showToast(
-        `Failed to add component: ${
-          error.response?.data?.message || error.message
-        }`,
-        "error"
-      );
-    }
+  // Helper function to check if component type allows only single instances
+  const isSingleSlotComponent = (componentType: string): boolean => {
+    return !["RAM", "SSD", "HDD"].includes(componentType);
   };
 
-  // Handle adding component to multiple builds
+  // Enhanced build selection confirmation handler with replacement logic
   const handleBuildSelectionConfirm = async (
     selectedBuildIds: number[],
     quantity: number
@@ -350,7 +356,83 @@ Go to Shopping Cart to checkout.`,
       return;
     }
 
-    const component = buildSelectionModal.component;
+    const newComponent = buildSelectionModal.component;
+    const buildsNeedingReplacement: Array<{
+      buildId: number;
+      buildName: string;
+      currentComponent: ComponentResponse;
+    }> = [];
+
+    // Check each selected build for existing components of the same type
+    if (isSingleSlotComponent(newComponent.type || "")) {
+      for (const buildId of selectedBuildIds) {
+        try {
+          const buildItemsResponse = await queryClient.fetchQuery({
+            queryKey: [`/api/v1/items/cart/${buildId}`],
+            queryFn: () => getItemsByCart(buildId),
+          });
+
+          if (buildItemsResponse?.data) {
+            // Find existing component of same type
+            const existingItem = buildItemsResponse.data.find(
+              (item: CartItemResponse) => {
+                const existingComponent = allComponents?.data?.find(
+                  (comp: ComponentResponse) => comp.id === item.componentId
+                );
+                return existingComponent?.type === newComponent.type;
+              }
+            );
+
+            if (existingItem) {
+              const existingComponent = allComponents?.data?.find(
+                (comp: ComponentResponse) =>
+                  comp.id === existingItem.componentId
+              );
+
+              const build = availableBuilds.find((b) => b.id === buildId);
+
+              if (existingComponent && build) {
+                buildsNeedingReplacement.push({
+                  buildId,
+                  buildName: build.name || `Build #${buildId}`,
+                  currentComponent: existingComponent,
+                });
+              }
+            }
+          }
+        } catch (error) {
+          console.error(
+            `Failed to check build ${buildId} for conflicts:`,
+            error
+          );
+        }
+      }
+    }
+
+    // If replacements needed, show replacement modal for first conflict
+    if (buildsNeedingReplacement.length > 0) {
+      const firstConflict = buildsNeedingReplacement[0];
+      setReplacementModal({
+        isOpen: true,
+        buildId: firstConflict.buildId,
+        buildName: firstConflict.buildName,
+        currentComponent: firstConflict.currentComponent,
+        newComponent,
+        quantity,
+      });
+      return; // Don't proceed with normal addition
+    }
+
+    // Proceed with normal addition for builds without conflicts
+    await proceedWithBuildAddition(selectedBuildIds, quantity, newComponent);
+  };
+
+  // Helper function for actual component addition
+  const proceedWithBuildAddition = async (
+    selectedBuildIds: number[],
+    quantity: number,
+    component: ComponentResponse
+  ) => {
     let successCount = 0;
     let failCount = 0;
 
@@ -371,7 +453,7 @@ Go to Shopping Cart to checkout.`,
       }
     }
 
-    // Invalidate relevant queries to refresh the UI
+    // Invalidate queries to refresh UI
     queryClient.invalidateQueries({
       queryKey: [`/api/v1/carts/user/${selectedUserId}`],
     });
@@ -382,7 +464,7 @@ Go to Shopping Cart to checkout.`,
       });
     });
 
-    // Show results
+    // Show results toast
     if (successCount > 0 && failCount === 0) {
       showToast(
         `Added ${component.name} to ${successCount} build${
@@ -394,14 +476,145 @@ Go to Shopping Cart to checkout.`,
       showToast(
         `Added to ${successCount} build${
           successCount !== 1 ? "s" : ""
-        }, failed for ${failCount}`,
+        }, ${failCount} failed`,
         "warning"
       );
     } else {
-      showToast("Failed to add component to any builds", "error");
+      showToast("Failed to add component to builds", "error");
+    }
+
+    // Close build selection modal
+    setBuildSelectionModal({ isOpen: false, component: null });
+  };
+
+  // Component replacement confirmation handlers
+  const handleComponentReplace = async () => {
+    if (
+      !replacementModal.buildId ||
+      !replacementModal.newComponent ||
+      !replacementModal.currentComponent
+    ) {
+      return;
+    }
+
+    try {
+      // First, find and remove the existing component
+      const buildItemsResponse = await queryClient.fetchQuery({
+        queryKey: [`/api/v1/items/cart/${replacementModal.buildId}`],
+        queryFn: () => getItemsByCart(replacementModal.buildId!),
+      });
+
+      const existingItem = buildItemsResponse?.data?.find(
+        (item: CartItemResponse) =>
+          item.componentId === replacementModal.currentComponent!.id
+      );
+
+      if (existingItem) {
+        await deleteItemMutation.mutateAsync({ id: existingItem.id! });
+      }
+
+      // Then add the new component
+      const cartItemRequest: CartItemRequest = {
+        cartId: replacementModal.buildId,
+        componentId: replacementModal.newComponent.id!,
+        quantity: replacementModal.quantity,
+      };
+
+      await createItemMutation.mutateAsync({ data: cartItemRequest });
+
+      // Refresh data
+      queryClient.invalidateQueries({
+        queryKey: [`/api/v1/carts/user/${selectedUserId}`],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/v1/items/cart/${replacementModal.buildId}`],
+      });
+
+      showToast(
+        `Replaced ${replacementModal.currentComponent.name} with ${replacementModal.newComponent.name}!`,
+        "success"
+      );
+
+      // Close modals
+      setReplacementModal({
+        isOpen: false,
+        buildId: null,
+        buildName: "",
+        currentComponent: null,
+        newComponent: null,
+        quantity: 1,
+      });
+      setBuildSelectionModal({ isOpen: false, component: null });
+    } catch (error: any) {
+      console.error("Failed to replace component:", error);
+      showToast(
+        `Failed to replace component: ${
+          error.response?.data?.message || error.message
+        }`,
+        "error"
+      );
     }
   };
 
+  const handleComponentReplacementCancel = () => {
+    setReplacementModal({
+      isOpen: false,
+      buildId: null,
+      buildName: "",
+      currentComponent: null,
+      newComponent: null,
+      quantity: 1,
+    });
+    // Keep build selection modal open for user to make different choices
+  };
+
+  // Handle quantity confirmation for shopping cart
+  const handleQuantityConfirm = async (quantity: number) => {
+    if (!quantityModal.component || !selectedUserId) {
+      showToast("Error: Missing component or user selection", "error");
+      return;
+    }
+
+    const component = quantityModal.component;
+
+    try {
+      let targetCart = shoppingCart;
+      if (!targetCart) {
+        targetCart = await ensureShoppingCart();
+        if (!targetCart) return;
+      }
+
+      const cartItemRequest: CartItemRequest = {
+        cartId: targetCart.id!,
+        componentId: component.id!,
+        quantity,
+      };
+
+      await createItemMutation.mutateAsync({ data: cartItemRequest });
+
+      queryClient.invalidateQueries({
+        queryKey: [`/api/v1/carts/user/${selectedUserId}`],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/v1/items/cart/${targetCart.id}`],
+      });
+
+      showToast(
+        `Added ${quantity}x ${component.name} to shopping cart! Go to Shopping Cart to checkout.`,
+        "success"
+      );
+    } catch (error: any) {
+      console.error("Failed to add component to shopping cart:", error);
+      showToast(
+        `Failed to add component: ${
+          error.response?.data?.message || error.message
+        }`,
+        "error"
+      );
+    }
+  };
+
+  // Modal control functions
   const closeQuantityModal = () => {
     setQuantityModal({
       isOpen: false,
@@ -417,7 +630,10 @@ Go to Shopping Cart to checkout.`,
     });
   };
 
+  // Clear all filters
   const clearAllFilters = () => {
+    setSearchTerm("");
+    setSelectedType(null);
     setFilters({
       type: "",
       brand: "",
@@ -425,231 +641,101 @@ Go to Shopping Cart to checkout.`,
       maxPrice: "",
       minStock: "0",
     });
-    setSearchTerm("");
-    setSelectedType(null);
-    setShowAdvancedSearch(false);
     setInStockOnly(false);
+    setShowAdvancedSearch(false);
   };
 
-  // Get the appropriate results based on search strategy with client-side filtering
-  const displayedComponents = useMemo(() => {
-    let results: ComponentResponse[] = [];
+  // SearchBar prop handlers
+  const handleSearchTermChange = (value: string) => {
+    setSearchTerm(value);
+  };
 
-    // Get base results based on search/browse strategy
-    if (searchStrategy) {
-      switch (searchStrategy.strategy) {
-        case "advanced":
-          results = components?.data || [];
+  const handleToggleAdvancedSearch = () => {
+    setShowAdvancedSearch(!showAdvancedSearch);
+  };
 
-          if ((searchStrategy.params as any).type) {
-            results = results.filter(
-              (c: ComponentResponse) =>
-                c.type === (searchStrategy.params as any).type
-            );
-          }
+  const handleFilterChange = (key: string, value: string) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+  };
 
-          if ((searchStrategy.params as any).brand) {
-            results = results.filter((c: ComponentResponse) =>
-              c.brand
-                ?.toLowerCase()
-                .includes((searchStrategy.params as any).brand.toLowerCase())
-            );
-          }
-
-          if ((searchStrategy.params as any).compatibilityTag) {
-            results = results.filter((c: ComponentResponse) =>
-              c.compatibilityTag
-                ?.toLowerCase()
-                .includes(
-                  (searchStrategy.params as any).compatibilityTag.toLowerCase()
-                )
-            );
-          }
-
-          if ((searchStrategy.params as any).maxPrice) {
-            const maxPrice = parseFloat(
-              (searchStrategy.params as any).maxPrice
-            );
-            if (!isNaN(maxPrice)) {
-              results = results.filter(
-                (c: ComponentResponse) => (c.price || 0) <= maxPrice
-              );
-            }
-          }
-
-          if ((searchStrategy.params as any).minStock !== "0") {
-            const minStock = parseInt(
-              (searchStrategy.params as any).minStock,
-              10
-            );
-            if (!isNaN(minStock)) {
-              results = results.filter(
-                (c: ComponentResponse) => (c.stockQuantity || 0) >= minStock
-              );
-            }
-          }
-          break;
-
-        case "type":
-          results = typeSearchResults?.data || [];
-          break;
-
-        case "general":
-          const searchTermLower = searchTerm.toLowerCase();
-          results = components?.data || [];
-
-          // Filter by searchable fields
-          results = results.filter((c: ComponentResponse) => {
-            const searchableFields = [
-              c.name,
-              c.brand,
-              c.type,
-              c.compatibilityTag,
-              c.socket,
-              c.formFactor,
-              c.ramType,
-              c.psuFormFactor,
-            ]
-              .filter(Boolean)
-              .map((field) => field!.toLowerCase());
-
-            return searchableFields.some((field) =>
-              field.includes(searchTermLower)
-            );
-          });
-          break;
-
-        case "compatibility":
-          results = components?.data || [];
-          const searchTag = (searchStrategy.params as string).toLowerCase();
-
-          results = results.filter((c: ComponentResponse) => {
-            return (
-              c.compatibilityTag?.toLowerCase().includes(searchTag) ||
-              c.socket?.toLowerCase().includes(searchTag) ||
-              c.formFactor?.toLowerCase().includes(searchTag) ||
-              c.ramType?.toLowerCase().includes(searchTag) ||
-              c.psuFormFactor?.toLowerCase().includes(searchTag)
-            );
-          });
-          break;
-
-        default:
-          results = [];
-      }
-    } else {
-      // Browse by type or show all if inStockOnly
-      if (selectedType) {
-        results = typeComponents?.data || [];
-      } else if (inStockOnly) {
-        results =
-          components?.data?.filter(
-            (c: ComponentResponse) => c.stockQuantity && c.stockQuantity > 0
-          ) || [];
-      } else {
-        results = []; // Don't show all components by default
-      }
-    }
-
-    return results;
-  }, [
-    searchStrategy,
-    components?.data,
-    typeComponents?.data,
-    typeSearchResults?.data,
-    selectedType,
-    inStockOnly,
-  ]);
-
-  const isSearchLoading =
-    isLoading || (searchStrategy?.strategy === "type" && isTypeSearchLoading);
-  const searchError = error || typeError || typeSearchError;
+  const handleInStockOnlyChange = (value: boolean) => {
+    setInStockOnly(value);
+  };
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      {/* Header */}
+      {/* Enhanced Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Component Catalog</h1>
-        <p className="text-gray-600 mt-2">
-          Browse and search for PC components to add to your builds or shopping
-          cart
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          Component Catalog
+        </h1>
+        <p className="text-gray-600">
+          Browse and search components for your PC builds
         </p>
       </div>
 
-      {/* Search and Filter Controls */}
+      {/* Search and Filters */}
       <div className="mb-8">
         <SearchBar
           searchTerm={searchTerm}
-          onSearchTermChange={handleSimpleSearch}
+          onSearchTermChange={handleSearchTermChange}
           showAdvancedSearch={showAdvancedSearch}
-          onToggleAdvancedSearch={handleAdvancedSearch}
+          onToggleAdvancedSearch={handleToggleAdvancedSearch}
           filters={filters}
           onFilterChange={handleFilterChange}
-          componentTypes={componentTypes}
           inStockOnly={inStockOnly}
           onInStockOnlyChange={handleInStockOnlyChange}
-          disabled={isLoading}
+          componentTypes={componentTypes}
+          disabled={false}
         />
       </div>
 
-      {/* Browse by Type - Enhanced with Icons */}
-      {!searchTerm && !showAdvancedSearch && !inStockOnly && (
-        <div className="mb-8">
-          <h2 className="text-xl font-semibold mb-4">Browse by Type</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-            {componentTypes.map((type) => {
-              const IconComponent = type.icon;
-              return (
-                <button
-                  key={type.id}
-                  onClick={() => handleBrowseType(type.id)}
-                  className={`p-4 rounded-lg border text-left transition-colors ${
-                    selectedType === type.id
-                      ? "bg-blue-50 border-blue-300 text-blue-800"
-                      : "bg-white border-gray-300 hover:bg-gray-50"
-                  }`}
-                >
-                  <div className="flex items-start space-x-3">
-                    <IconComponent
-                      size={24}
-                      className={`flex-shrink-0 mt-0.5 ${
-                        selectedType === type.id
-                          ? "text-blue-600"
-                          : "text-gray-600"
-                      }`}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium">{type.name}</div>
-                      <div className="text-sm text-gray-600">
-                        {type.description}
-                      </div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        {getComponentCount(type.id)} available
-                      </div>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+      {/* Component Type Categories */}
+      <div className="mb-8">
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={() => setSelectedType(null)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              !selectedType
+                ? "bg-blue-600 text-white"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            All Components
+          </button>
+          {componentTypes.map((type) => {
+            const IconComponent = type.icon;
+            return (
+              <button
+                key={type.id}
+                onClick={() => setSelectedType(type.id)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  selectedType === type.id
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                <IconComponent size={16} />
+                {type.name}
+              </button>
+            );
+          })}
         </div>
-      )}
+      </div>
 
-      {/* Results */}
-      <div className="space-y-6">
-        {/* Loading state */}
+      {/* Results Section */}
+      <div>
+        {/* Loading State */}
         {isSearchLoading && (
           <div className="text-center py-8">
             <div className="text-gray-600">Loading components...</div>
           </div>
         )}
 
-        {/* Error state */}
+        {/* Error State */}
         {searchError && (
           <div className="text-center py-8">
-            <div className="text-red-600 mb-2">
-              Error loading components: {searchError.message}
-            </div>
+            <div className="text-red-600 mb-2">Failed to load components</div>
             <button
               onClick={() => refetch()}
               className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
@@ -659,7 +745,7 @@ Go to Shopping Cart to checkout.`,
           </div>
         )}
 
-        {/* Results grid */}
+        {/* Results Grid */}
         {!isSearchLoading && !searchError && displayedComponents.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {displayedComponents.map((component) => (
@@ -737,6 +823,19 @@ Go to Shopping Cart to checkout.`,
         availableBuilds={availableBuilds}
         isLoading={buildsLoading}
       />
+
+      {/* Component Replacement Modal */}
+      {replacementModal.currentComponent && replacementModal.newComponent && (
+        <ComponentReplacementModal
+          isOpen={replacementModal.isOpen}
+          onClose={handleComponentReplacementCancel}
+          onReplace={handleComponentReplace}
+          onCancel={handleComponentReplacementCancel}
+          currentComponent={replacementModal.currentComponent}
+          newComponent={replacementModal.newComponent}
+          buildName={replacementModal.buildName}
+        />
+      )}
     </div>
   );
 };
