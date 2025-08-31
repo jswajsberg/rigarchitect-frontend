@@ -194,18 +194,6 @@ const ComponentCard = ({
         break;
     }
 
-    // Add compatibility tag if available and not already shown
-    if (
-      component.compatibilityTag &&
-      !details.some((d) => d.value === component.compatibilityTag)
-    ) {
-      details.push({
-        label: "Compatibility",
-        value: component.compatibilityTag,
-        important: false,
-      });
-    }
-
     return details;
   };
 
