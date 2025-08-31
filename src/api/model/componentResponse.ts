@@ -7,6 +7,7 @@
  */
 import type { ComponentResponseType } from './componentResponseType';
 import type { ComponentResponseExtraCompatibility } from './componentResponseExtraCompatibility';
+import type { ComponentResponseMetadata } from './componentResponseMetadata';
 
 /**
  * Response DTO representing a PC component
@@ -44,6 +45,8 @@ export interface ComponentResponse {
   pciSlotsRequired?: number;
   /** Flexible JSON object for additional compatibility data */
   extraCompatibility?: ComponentResponseExtraCompatibility;
+  /** Metadata for performance and template matching */
+  metadata?: ComponentResponseMetadata;
   /** Timestamp when the component was created */
   createdAt?: string;
   /** Timestamp when the component was last updated */

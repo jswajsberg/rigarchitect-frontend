@@ -7,6 +7,7 @@
  */
 import type { ComponentRequestType } from './componentRequestType';
 import type { ComponentRequestExtraCompatibility } from './componentRequestExtraCompatibility';
+import type { ComponentRequestMetadata } from './componentRequestMetadata';
 
 /**
  * Request DTO for creating or updating a PC component
@@ -61,4 +62,6 @@ export interface ComponentRequest {
   pciSlotsRequired?: number;
   /** Flexible JSON object for additional compatibility data */
   extraCompatibility?: ComponentRequestExtraCompatibility;
+  /** Metadata for performance and template matching */
+  metadata?: ComponentRequestMetadata;
 }
