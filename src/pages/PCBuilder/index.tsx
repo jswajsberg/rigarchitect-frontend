@@ -182,20 +182,6 @@ const PCBuilder: React.FC = () => {
     }
   }, [selectedUserId, savedBuilds.length]);
 
-  // Update price range when user budget changes
-  useEffect(() => {
-    if (authUser?.budget) {
-      const userBudget = authUser.budget;
-      // Only update if current max exceeds user budget
-      if (priceRange.max > userBudget) {
-        setPriceRange((prev) => ({
-          min: Math.min(prev.min, userBudget),
-          max: Math.min(prev.max, userBudget),
-        }));
-      }
-    }
-  }, [authUser?.budget, priceRange.max, setPriceRange]);
-
   // Load components when build is selected (COMPLETELY DISABLED when using templates)
   useEffect(() => {
     // Skip entirely if using template - templates manage their own state
@@ -397,11 +383,6 @@ const PCBuilder: React.FC = () => {
           );
           missingComponents.forEach((missing) => {
             console.log(`- ${missing.componentType}: ${missing.details}`);
-            if (missing.compatibilityConstraints?.length) {
-              console.log(
-                `  Constraints: ${missing.compatibilityConstraints.join(", ")}`
-              );
-            }
           });
         }
 
@@ -946,18 +927,6 @@ const PCBuilder: React.FC = () => {
                             <div className="text-sm text-amber-700 mb-2">
                               {missing.details}
                             </div>
-                            {missing.compatibilityConstraints?.length > 0 && (
-                              <div className="text-xs text-amber-600">
-                                <strong>Requirements:</strong>{" "}
-                                {missing.compatibilityConstraints.join(", ")}
-                              </div>
-                            )}
-                            {missing.suggestedBudget && (
-                              <div className="text-xs text-amber-600 mt-1">
-                                <strong>Suggested budget:</strong> $
-                                {missing.suggestedBudget}
-                              </div>
-                            )}
                           </div>
                         ))}
                       </div>
