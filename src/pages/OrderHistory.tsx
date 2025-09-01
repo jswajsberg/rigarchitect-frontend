@@ -106,7 +106,7 @@ const OrderHistory: React.FC = () => {
   // Handle no user selected
   if (!selectedUserId) {
     return (
-      <div className="p-6 max-w-6xl mx-auto">
+      <div className="p-6 max-w-7xl mx-auto">
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-8 text-center">
           <User size={48} className="text-yellow-600 mx-auto mb-4" />
           <h3 className="text-yellow-800 font-semibold text-lg mb-2">
@@ -122,7 +122,7 @@ const OrderHistory: React.FC = () => {
 
   if (cartsLoading) {
     return (
-      <div className="p-6 max-w-6xl mx-auto">
+      <div className="p-6 max-w-7xl mx-auto">
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
           <div className="ml-4 text-lg text-gray-600">
@@ -135,7 +135,7 @@ const OrderHistory: React.FC = () => {
 
   if (cartsError) {
     return (
-      <div className="p-6 max-w-6xl mx-auto">
+      <div className="p-6 max-w-7xl mx-auto">
         <div className="bg-red-50 border border-red-200 rounded-lg p-8 text-center">
           <AlertTriangle size={48} className="text-red-600 mx-auto mb-4" />
           <h3 className="text-red-800 font-semibold text-lg mb-2">
@@ -148,7 +148,7 @@ const OrderHistory: React.FC = () => {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Order History</h1>

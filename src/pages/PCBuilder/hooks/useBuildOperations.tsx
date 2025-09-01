@@ -53,14 +53,14 @@ export const useBuildOperations = ({
   const deleteItemMutation = useDeleteItem();
 
   // Save build (create new or update existing)
-  const handleSaveBuild = useCallback(async () => {
+  const handleSaveBuild = useCallback(async (silent = false) => {
     if (!buildName.trim()) {
-      alert("Please enter a build name");
+      if (!silent) alert("Please enter a build name");
       return;
     }
 
     if (!selectedUserId) {
-      alert("Please select a user first");
+      if (!silent) alert("Please select a user first");
       return;
     }
 
@@ -138,18 +138,23 @@ export const useBuildOperations = ({
         queryKey: [`/api/v1/items/cart/${targetBuildId}`],
       });
 
-      const buildType =
-        componentCount > 0
-          ? `with ${componentCount} components`
-          : "(empty build)";
-      alert(`Build "${buildName}" saved successfully ${buildType}!`);
+      // Only show popup for manual saves
+      if (!silent) {
+        const buildType =
+          componentCount > 0
+            ? `with ${componentCount} components`
+            : "(empty build)";
+        alert(`Build "${buildName}" saved successfully ${buildType}!`);
+      }
     } catch (error: any) {
       console.error("Failed to save build:", error);
-      alert(
-        `Failed to save build: ${
-          error.response?.data?.message || error.message
-        }`
-      );
+      if (!silent) {
+        alert(
+          `Failed to save build: ${
+            error.response?.data?.message || error.message
+          }`
+        );
+      }
     }
   }, [
     buildName,
@@ -320,7 +325,7 @@ export const useBuildOperations = ({
           queryKey: [`/api/v1/carts/user/${selectedUserId}`],
         });
 
-        alert(`New build "${cleanBuildName}" created successfully!`);
+        // Don't show popup for new build creation - it will be auto-saved
       } catch (error: any) {
         console.error("Failed to create new build:", error);
         alert(

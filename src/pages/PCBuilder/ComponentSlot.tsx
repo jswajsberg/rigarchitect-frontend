@@ -24,7 +24,7 @@ interface ComponentSlotProps {
   title: string;
   component: ComponentResponse | ComponentResponse[] | undefined;
   onSelect: (component: ComponentResponse) => void;
-  onRemove: () => void;
+  onRemove: (componentId?: number) => void;
   suggestions: ComponentResponse[];
   issues: CompatibilityIssue[];
 }

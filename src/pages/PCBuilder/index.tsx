@@ -3,7 +3,10 @@ import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { useSelectedUserId } from "../../contexts/UserContext";
 import { useGetAllComponents } from "../../api/component-controller/component-controller";
 import { useCreateItem } from "../../api/cart-item-controller/cart-item-controller";
-import { useGetUserCarts } from "../../api/build-cart-controller/build-cart-controller";
+import {
+  useGetUserCarts,
+  useCreateCartForUser,
+} from "../../api/build-cart-controller/build-cart-controller";
 import { useGetItemsByCart } from "../../api/cart-item-controller/cart-item-controller";
 import { useAuth } from "../../contexts/AuthContext";
 import type { ComponentResponse, CartItemResponse } from "../../api/model";
@@ -43,6 +46,7 @@ const PCBuilder: React.FC = () => {
   const selectedUserId = useSelectedUserId();
   const { data: allComponents } = useGetAllComponents();
   const createItemMutation = useCreateItem();
+  const createCartMutation = useCreateCartForUser();
   const { user: authUser } = useAuth();
 
   // === Persistent builder state (from BuilderContext) ===
@@ -68,7 +72,11 @@ const PCBuilder: React.FC = () => {
   const [canScrollRight, setCanScrollRight] = useState(true);
   const [isUsingTemplate, setIsUsingTemplate] = useState(false);
   const [missingComponentsInfo, setMissingComponentsInfo] = useState<any[]>([]);
+  const [isApplyingTemplate, setIsApplyingTemplate] = useState(false);
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
+  const autoSaveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
   // Get saved builds (ACTIVE status)
   const { data: userCarts } = useGetUserCarts(selectedUserId || 0, {
@@ -98,6 +106,152 @@ const PCBuilder: React.FC = () => {
     selectedBuildItems,
     createItemMutation,
   });
+
+  // Auto-save functionality
+  const autoSave = useCallback(async () => {
+    console.log("Auto-save triggered:", {
+      selectedUserId,
+      currentBuildKeys: Object.keys(currentBuild),
+      currentBuild,
+      buildName,
+      selectedBuildId,
+      isModifyingExisting,
+    });
+
+    if (!selectedUserId || Object.keys(currentBuild).length === 0) {
+      console.log("Auto-save skipped: no user or no components");
+      return; // Don't auto-save if no user or no components
+    }
+
+    // Generate a name if we don't have one, but only if we have components
+    if (!buildName.trim() && Object.keys(currentBuild).length > 0) {
+      const componentCount = Object.values(currentBuild).reduce(
+        (count, component) => {
+          if (Array.isArray(component)) {
+            return count + component.length;
+          }
+          return count + (component ? 1 : 0);
+        },
+        0
+      );
+      const autoName = `Auto Build ${new Date().toLocaleDateString()} (${componentCount} components)`;
+      setBuildName(autoName);
+      console.log("Generated auto build name:", autoName);
+    }
+
+    setIsAutoSaving(true);
+    console.log("Starting auto-save...");
+
+    try {
+      // Use the build name (should already be set by now)
+      const buildNameToUse = buildName.trim();
+
+      // If no existing build, create one
+      if (!selectedBuildId || !isModifyingExisting) {
+        console.log("Creating new build...");
+        // Create new build
+        const newBuildResponse = await createCartMutation.mutateAsync({
+          userId: selectedUserId,
+          data: { name: buildNameToUse, status: "ACTIVE" },
+        });
+        console.log("New build created:", newBuildResponse.data);
+        setSelectedBuildId(newBuildResponse.data.id!);
+        setIsModifyingExisting(true);
+      }
+
+      // Save the build silently (this will handle updating existing builds)
+      console.log("Saving build...");
+      await handleSaveBuild(true); // Pass true for silent save
+      setLastSaved(new Date());
+      console.log("Auto-save completed successfully");
+    } catch (error) {
+      console.error("Auto-save failed:", error);
+      // Don't show error alerts for auto-save failures to avoid annoying the user
+    } finally {
+      setIsAutoSaving(false);
+    }
+  }, [
+    selectedUserId,
+    currentBuild,
+    buildName,
+    selectedBuildId,
+    isModifyingExisting,
+    createCartMutation,
+    handleSaveBuild,
+    setBuildName,
+    setSelectedBuildId,
+    setIsModifyingExisting,
+  ]);
+
+  // Debounced auto-save
+  const debouncedAutoSave = useCallback(() => {
+    console.log("Debounced auto-save triggered");
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      console.log("Auto-save timeout reached, executing auto-save");
+      autoSave();
+    }, 3000); // Auto-save after 3 seconds of inactivity
+  }, [autoSave]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Auto-save when currentBuild changes (but not during template application or when template is focused)
+  useEffect(() => {
+    // Skip auto-save during template application or when template is focused to prevent loops
+    if (isApplyingTemplate || isUsingTemplate) {
+      return;
+    }
+
+    // Only auto-save if we have components and a user selected
+    if (selectedUserId && Object.keys(currentBuild).length > 0) {
+      console.log("CurrentBuild changed, triggering auto-save:", currentBuild);
+      debouncedAutoSave();
+    }
+  }, [
+    currentBuild,
+    selectedUserId,
+    debouncedAutoSave,
+    isApplyingTemplate,
+    isUsingTemplate,
+  ]);
+
+  // Auto-save when build name changes (if we have an existing build)
+  useEffect(() => {
+    // Skip auto-save during template application or when template is focused to prevent loops
+    if (isApplyingTemplate || isUsingTemplate) {
+      return;
+    }
+
+    if (
+      selectedUserId &&
+      buildName.trim() &&
+      isModifyingExisting &&
+      selectedBuildId &&
+      Object.keys(currentBuild).length > 0
+    ) {
+      console.log("Build name changed, triggering auto-save:", buildName);
+      debouncedAutoSave();
+    }
+  }, [
+    buildName,
+    selectedUserId,
+    isModifyingExisting,
+    selectedBuildId,
+    currentBuild,
+    debouncedAutoSave,
+    isApplyingTemplate,
+    isUsingTemplate,
+  ]);
 
   // Wrapper for clear build that also sets the user explicitly cleared flag
   const handleClearBuild = useCallback(() => {
@@ -302,8 +456,14 @@ const PCBuilder: React.FC = () => {
 
       // Clear missing components info when user manually selects components
       setMissingComponentsInfo([]);
+
+      // Clear template state when user manually selects components
+      if (isUsingTemplate) {
+        setIsUsingTemplate(false);
+        setSelectedTemplateId("");
+      }
     },
-    [setCurrentBuild]
+    [setCurrentBuild, isUsingTemplate]
   );
 
   const handleRemoveComponent = useCallback(
@@ -329,71 +489,78 @@ const PCBuilder: React.FC = () => {
 
         return newBuild;
       });
+
+      // Clear template state when user manually removes components
+      if (isUsingTemplate) {
+        setIsUsingTemplate(false);
+        setSelectedTemplateId("");
+      }
     },
-    [setCurrentBuild]
+    [setCurrentBuild, isUsingTemplate]
   );
 
-  // Apply template with simplified, atomic replacement
+  // Apply template with atomic replacement - no setTimeout to prevent race conditions
   const handleApplyTemplate = useCallback(
     (templateId: string) => {
       const template = getBuildTemplate(templateId);
-      if (!template) return;
+      if (!template || isApplyingTemplate) return;
 
-      // FIRST: Clear ALL state completely
+      // Prevent multiple simultaneous template applications
+      setIsApplyingTemplate(true);
+
+      // Clear ALL state completely and immediately
       setCurrentBuild({});
       setSelectedBuildId(null);
       setIsModifyingExisting(false);
       setUserExplicitlyCleared(false);
       setIsUsingTemplate(true);
+      setSelectedTemplateId(templateId);
+      setMissingComponentsInfo([]);
 
-      // THEN: Apply the new template in next tick to ensure clean slate
-      setTimeout(() => {
-        const { suggestedBuild, missingComponents, budgetWarnings } =
-          applyBuildTemplate(template, components);
-        // Direct atomic replacement - create completely new object
-        const cleanBuild: BuildSlots = {
-          CPU: suggestedBuild.CPU || undefined,
-          GPU: suggestedBuild.GPU || undefined,
-          Motherboard: suggestedBuild.Motherboard || undefined,
-          RAM: suggestedBuild.RAM ? [...suggestedBuild.RAM] : [], // Always fresh array
-          PSU: suggestedBuild.PSU || undefined,
-          SSD: suggestedBuild.SSD ? [...suggestedBuild.SSD] : [], // Always fresh array
-          HDD: suggestedBuild.HDD ? [...suggestedBuild.HDD] : [], // Always fresh array
-          Case: suggestedBuild.Case || undefined,
-          Cooler: suggestedBuild.Cooler || undefined,
-        };
+      // Apply the new template immediately - no setTimeout to prevent race conditions
+      const { suggestedBuild, missingComponents, budgetWarnings } =
+        applyBuildTemplate(template, components);
 
-        setCurrentBuild(cleanBuild);
-        setPriceRange(template.targetPrice);
-        // Ensure clean template name
-        const cleanTemplateName = String(
-          template.name || "Template Build"
-        ).trim();
-        setBuildName(cleanTemplateName);
-        setSelectedTemplateId(templateId);
+      // Create completely new build object with proper array handling
+      const cleanBuild: BuildSlots = {
+        CPU: suggestedBuild.CPU || undefined,
+        GPU: suggestedBuild.GPU || undefined,
+        Motherboard: suggestedBuild.Motherboard || undefined,
+        RAM: suggestedBuild.RAM ? [...suggestedBuild.RAM] : undefined,
+        PSU: suggestedBuild.PSU || undefined,
+        SSD: suggestedBuild.SSD ? [...suggestedBuild.SSD] : undefined,
+        HDD: suggestedBuild.HDD ? [...suggestedBuild.HDD] : undefined,
+        Case: suggestedBuild.Case || undefined,
+        Cooler: suggestedBuild.Cooler || undefined,
+      };
 
-        // Store missing components for UI display
-        setMissingComponentsInfo(missingComponents);
+      // Set all state atomically
+      setCurrentBuild(cleanBuild);
+      setPriceRange(template.targetPrice);
+      setBuildName(String(template.name || "Template Build").trim());
+      setMissingComponentsInfo(missingComponents);
 
-        // Log missing components for debugging
-        if (missingComponents.length > 0) {
-          console.log(
-            `Template "${template.name}" missing components:`,
-            missingComponents
-          );
-          missingComponents.forEach((missing) => {
-            console.log(`- ${missing.componentType}: ${missing.details}`);
-          });
-        }
+      // Reset loading state
+      setIsApplyingTemplate(false);
 
-        // Log budget warnings
-        if (budgetWarnings.length > 0) {
-          console.log(
-            `Template "${template.name}" budget warnings:`,
-            budgetWarnings
-          );
-        }
-      }, 0);
+      // Log missing components for debugging
+      if (missingComponents.length > 0) {
+        console.log(
+          `Template "${template.name}" missing components:`,
+          missingComponents
+        );
+        missingComponents.forEach((missing) => {
+          console.log(`- ${missing.componentType}: ${missing.details}`);
+        });
+      }
+
+      // Log budget warnings
+      if (budgetWarnings.length > 0) {
+        console.log(
+          `Template "${template.name}" budget warnings:`,
+          budgetWarnings
+        );
+      }
     },
     [
       components,
@@ -402,6 +569,7 @@ const PCBuilder: React.FC = () => {
       setBuildName,
       setIsModifyingExisting,
       setSelectedBuildId,
+      isApplyingTemplate,
     ]
   );
 
@@ -468,7 +636,7 @@ const PCBuilder: React.FC = () => {
               </button>
               {Object.keys(currentBuild).length > 0 && (
                 <button
-                  onClick={handleSaveBuild}
+                  onClick={() => handleSaveBuild()}
                   className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
                 >
                   {isModifyingExisting ? "Update Build" : "Save Build"}
@@ -604,8 +772,14 @@ const PCBuilder: React.FC = () => {
                 return (
                   <div
                     key={template.id}
-                    onClick={() => handleApplyTemplate(template.id)}
-                    className={`flex-shrink-0 w-72 h-36 p-3 rounded-lg border-2 cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-[1.02] flex flex-col justify-between ${
+                    onClick={() =>
+                      !isApplyingTemplate && handleApplyTemplate(template.id)
+                    }
+                    className={`flex-shrink-0 w-72 h-36 p-3 rounded-lg border-2 transition-all duration-200 flex flex-col justify-between ${
+                      isApplyingTemplate
+                        ? "cursor-not-allowed opacity-50"
+                        : "cursor-pointer hover:shadow-lg hover:scale-[1.02]"
+                    } ${
                       isSelected
                         ? "border-blue-500 bg-blue-50 shadow-md"
                         : "border-gray-200 hover:border-gray-300 bg-white"
@@ -636,6 +810,13 @@ const PCBuilder: React.FC = () => {
                             Active
                           </div>
                         )}
+                        {isApplyingTemplate &&
+                          selectedTemplateId === template.id && (
+                            <div className="flex items-center gap-1 text-xs text-orange-600 font-medium mt-1 whitespace-nowrap">
+                              <div className="w-2.5 h-2.5 border-2 border-orange-600 border-t-transparent rounded-full animate-spin"></div>
+                              Applying...
+                            </div>
+                          )}
                       </div>
                     </div>
 
@@ -684,7 +865,9 @@ const PCBuilder: React.FC = () => {
                   <input
                     type="text"
                     value={String(buildName || "").trim()}
-                    onChange={(e) => setBuildName(e.target.value.trim())}
+                    onChange={(e) => {
+                      setBuildName(e.target.value.trim());
+                    }}
                     onKeyPress={(e) => {
                       if (e.key === "Enter" && isModifyingExisting) {
                         handleSaveBuild();
@@ -705,6 +888,26 @@ const PCBuilder: React.FC = () => {
                   <div className="text-sm text-blue-700">
                     {Object.keys(currentBuild).length} components selected
                   </div>
+
+                  {/* Auto-save status */}
+                  <div className="text-xs">
+                    {isAutoSaving ? (
+                      <div className="text-blue-600 flex items-center gap-1">
+                        <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                        Auto-saving...
+                      </div>
+                    ) : lastSaved ? (
+                      <div className="text-green-600 flex items-center gap-1">
+                        <CheckCircle size={12} />
+                        Saved {lastSaved.toLocaleTimeString()}
+                      </div>
+                    ) : Object.keys(currentBuild).length > 0 ? (
+                      <div className="text-gray-500">
+                        Changes will auto-save
+                      </div>
+                    ) : null}
+                  </div>
+
                   {isModifyingExisting && buildName && (
                     <div className="text-xs text-blue-600">
                       ✏️ Press Enter to save changes or click "Update Build"
@@ -979,7 +1182,9 @@ const PCBuilder: React.FC = () => {
                   title="RAM"
                   component={currentBuild.RAM}
                   onSelect={(comp) => handleSelectComponent("RAM", comp)}
-                  onRemove={() => handleRemoveComponent("RAM")}
+                  onRemove={(componentId) =>
+                    handleRemoveComponent("RAM", componentId)
+                  }
                   suggestions={suggestions.RAM || []}
                   issues={compatibility.issues}
                 />
@@ -989,7 +1194,9 @@ const PCBuilder: React.FC = () => {
                   title="SSD"
                   component={currentBuild.SSD}
                   onSelect={(comp) => handleSelectComponent("SSD", comp)}
-                  onRemove={() => handleRemoveComponent("SSD")}
+                  onRemove={(componentId) =>
+                    handleRemoveComponent("SSD", componentId)
+                  }
                   suggestions={suggestions.SSD || []}
                   issues={compatibility.issues}
                 />
@@ -999,7 +1206,9 @@ const PCBuilder: React.FC = () => {
                   title="HDD"
                   component={currentBuild.HDD}
                   onSelect={(comp) => handleSelectComponent("HDD", comp)}
-                  onRemove={() => handleRemoveComponent("HDD")}
+                  onRemove={(componentId) =>
+                    handleRemoveComponent("HDD", componentId)
+                  }
                   suggestions={suggestions.HDD || []}
                   issues={compatibility.issues}
                 />

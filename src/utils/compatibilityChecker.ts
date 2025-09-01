@@ -593,13 +593,21 @@ export function getComponentSuggestions(
       if (component.type !== targetType) return false;
 
       // Filter by stock availability
-      if (!component.stockQuantity || component.stockQuantity <= 0)
+      if (!component.stockQuantity || component.stockQuantity <= 0) {
         return false;
+      }
 
-      // Filter by price range
+      // Filter by price range - be more lenient
       if (priceRange) {
         const price = Number(component.price) || 0;
-        if (price < priceRange.min || price > priceRange.max) return false;
+        // Only filter out if price is significantly outside range (more than 2x max)
+        if (price > priceRange.max * 2) {
+          return false;
+        }
+        // Allow components slightly under min range (down to 50% of min)
+        if (price < priceRange.min * 0.5) {
+          return false;
+        }
       }
 
       // Test compatibility by adding component appropriately
@@ -619,12 +627,30 @@ export function getComponentSuggestions(
         testBuild[targetType] = component;
       }
 
+      // If build is empty, be more lenient with compatibility
+      const buildIsEmpty = Object.keys(build).length === 0;
+      
+      if (buildIsEmpty) {
+        // For empty builds, only check basic compatibility (socket matching for CPU/Motherboard)
+        if (targetType === "CPU" && build.Motherboard?.socket && component.socket) {
+          if (component.socket !== build.Motherboard.socket) {
+            return false;
+          }
+        }
+        if (targetType === "Motherboard" && build.CPU?.socket && component.socket) {
+          if (component.socket !== build.CPU.socket) {
+            return false;
+          }
+        }
+        // For empty builds, allow all other components
+        return true;
+      }
+
       const compatibility = checkBuildCompatibility(testBuild);
+      const hasErrors = compatibility.issues.filter((i) => i.type === "error").length > 0;
 
       // Only suggest if it doesn't introduce errors
-      return (
-        compatibility.issues.filter((i) => i.type === "error").length === 0
-      );
+      return !hasErrors;
     })
     .sort((a, b) => {
       // Enhanced sorting algorithm with metadata support
