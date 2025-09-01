@@ -1,5 +1,6 @@
-// src/contexts/BuilderContext.tsx - Persist in-memory builder state across navigation
-import React, { createContext, useContext, useState } from "react";
+// src/contexts/BuilderContext.tsx
+import React, { createContext, useContext, useState, useEffect } from "react";
+import { useAuth } from "./AuthContext";
 import type { BuildSlots } from "../utils/compatibilityChecker";
 
 type PriceRange = { min: number; max: number };
@@ -28,20 +29,42 @@ const BuilderContext = createContext<BuilderContextType | undefined>(undefined);
 export const BuilderProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
+  const { user: authUser } = useAuth();
   const [selectedBuildId, setSelectedBuildId] = useState<number | null>(null);
   const [currentBuild, setCurrentBuild] = useState<BuildSlots>({});
-  const [priceRange, setPriceRange] = useState<PriceRange>({
-    min: 0,
-    max: 5000,
-  });
   const [buildName, setBuildName] = useState<string>("");
   const [isModifyingExisting, setIsModifyingExisting] =
     useState<boolean>(false);
 
+  // Initialize price range based on user budget
+  const getInitialPriceRange = (): PriceRange => {
+    const budget = authUser?.budget || 5000;
+    return {
+      min: 0,
+      max: budget,
+    };
+  };
+
+  const [priceRange, setPriceRange] =
+    useState<PriceRange>(getInitialPriceRange);
+
+  // Update price range when user budget changes
+  useEffect(() => {
+    if (authUser?.budget) {
+      const budget = authUser.budget;
+      // Only update if current settings would exceed budget
+      setPriceRange((prev) => ({
+        min: Math.min(prev.min, budget),
+        max: Math.min(prev.max, budget),
+      }));
+    }
+  }, [authUser?.budget]);
+
   const clearBuildState = () => {
+    const budget = authUser?.budget || 5000;
     setSelectedBuildId(null);
     setCurrentBuild({});
-    setPriceRange({ min: 0, max: 5000 });
+    setPriceRange({ min: 0, max: budget }); // Reset to budget-based range
     setBuildName("");
     setIsModifyingExisting(false);
   };

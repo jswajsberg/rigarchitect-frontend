@@ -234,9 +234,9 @@ function checkPowerCompatibility(build: BuildSlots): {
   // Calculate total power consumption
   let totalPower = 0;
 
-  // Enhanced power estimation using metadata
-  Object.entries(build).forEach(([, component]) => {
-    if (!component) return;
+  // Enhanced power estimation using metadata - exclude PSU as it provides power
+  Object.entries(build).forEach(([componentType, component]) => {
+    if (!component || componentType === "PSU") return; // PSU provides power, doesn't consume
 
     if (Array.isArray(component)) {
       // Handle RAM, SSD, HDD arrays
@@ -512,7 +512,7 @@ function getHardcodedPowerEstimate(component: ComponentResponse): number {
       return POWER_ESTIMATES.Case.fans;
 
     case "PSU":
-      // PSU itself doesn't consume power in our calculation
+      // PSU provides power, doesn't consume it
       return 0;
 
     default:
@@ -527,44 +527,45 @@ function isFormFactorCompatible(
   mbFormFactor: string,
   caseFormFactor: string
 ): boolean {
-  const compatibility: Record<string, string[]> = {
-    "E-ATX": ["Full Tower", "Super Tower"],
-    ATX: ["ATX", "Full Tower", "Mid Tower", "Super Tower"],
-    "Micro-ATX": [
-      "ATX",
-      "Micro-ATX",
-      "Full Tower",
-      "Mid Tower",
-      "Mini Tower",
-      "Super Tower",
+  // Normalize form factor names
+  const mbFF = mbFormFactor.toLowerCase().trim();
+  const caseFF = caseFormFactor.toLowerCase().trim();
+
+  // Direct match
+  if (mbFF === caseFF) return true;
+
+  // Motherboard compatibility rules (what cases each motherboard fits in)
+  const mbCompatibility: Record<string, string[]> = {
+    "mini-itx": [
+      "mini-itx",
+      "micro-atx",
+      "atx",
+      "full tower",
+      "mid tower",
+      "mini tower",
+      "sff",
+      "htpc",
     ],
-    "Mini-ITX": [
-      "ATX",
-      "Micro-ATX",
-      "Mini-ITX",
-      "Full Tower",
-      "Mid Tower",
-      "Mini Tower",
-      "SFF",
-      "HTPC",
-      "Super Tower",
-    ],
+    "micro-atx": ["micro-atx", "atx", "full tower", "mid tower", "mini tower"],
+    atx: ["atx", "full tower", "mid tower"],
+    "e-atx": ["full tower", "super tower"],
   };
 
-  // Handle case form factors
+  // Case compatibility rules (what motherboards each case supports)
   const caseCompatibility: Record<string, string[]> = {
-    "Full Tower": ["E-ATX", "ATX", "Micro-ATX", "Mini-ITX"],
-    "Super Tower": ["E-ATX", "ATX", "Micro-ATX", "Mini-ITX"],
-    "Mid Tower": ["ATX", "Micro-ATX", "Mini-ITX"],
-    "Mini Tower": ["Micro-ATX", "Mini-ITX"],
-    SFF: ["Mini-ITX"],
-    HTPC: ["Mini-ITX"],
+    "mini tower": ["mini-itx", "micro-atx"],
+    "mid tower": ["mini-itx", "micro-atx", "atx"],
+    "full tower": ["mini-itx", "micro-atx", "atx", "e-atx"],
+    "super tower": ["mini-itx", "micro-atx", "atx", "e-atx"],
+    sff: ["mini-itx"],
+    htpc: ["mini-itx"],
   };
 
+  // Check both directions
   return (
-    compatibility[mbFormFactor]?.includes(caseFormFactor) ||
-    caseCompatibility[caseFormFactor]?.includes(mbFormFactor) ||
-    mbFormFactor === caseFormFactor
+    mbCompatibility[mbFF]?.some((c) => caseFF.includes(c)) ||
+    caseCompatibility[caseFF]?.some((m) => mbFF.includes(m)) ||
+    mbFF === caseFF
   );
 }
 
