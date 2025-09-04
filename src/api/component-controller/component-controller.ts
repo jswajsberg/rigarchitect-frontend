@@ -34,11 +34,8 @@ import type {
 import type {
   ComponentRequest,
   ComponentResponse,
-  GetAllComponentsParams,
-  GetComponentsByTypeParams,
   GetComponentsInStockParams,
   MessageResponse,
-  PageComponentResponse,
   SearchComponentsParams
 } from '.././model';
 
@@ -257,37 +254,35 @@ export const useDeleteComponent = <TError = AxiosError<MessageResponse>,
       return useMutation(mutationOptions , queryClient);
     }
     /**
- * Retrieve paginated components with optional filters
- * @summary Get all components (paginated)
+ * Retrieve all components in the catalog
+ * @summary Get all components
  */
 export const getAllComponents = (
-    params?: GetAllComponentsParams, options?: AxiosRequestConfig
- ): Promise<AxiosResponse<PageComponentResponse>> => {
+     options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<ComponentResponse[]>> => {
     
     
     return axios.default.get(
-      `/api/v1/components`,{
-    ...options,
-        params: {...params, ...options?.params},}
+      `/api/v1/components`,options
     );
   }
 
 
-export const getGetAllComponentsQueryKey = (params?: GetAllComponentsParams,) => {
-    return [`/api/v1/components`, ...(params ? [params]: [])] as const;
+export const getGetAllComponentsQueryKey = () => {
+    return [`/api/v1/components`] as const;
     }
 
     
-export const getGetAllComponentsQueryOptions = <TData = Awaited<ReturnType<typeof getAllComponents>>, TError = AxiosError<unknown>>(params?: GetAllComponentsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllComponents>>, TError, TData>>, axios?: AxiosRequestConfig}
+export const getGetAllComponentsQueryOptions = <TData = Awaited<ReturnType<typeof getAllComponents>>, TError = AxiosError<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllComponents>>, TError, TData>>, axios?: AxiosRequestConfig}
 ) => {
 
 const {query: queryOptions, axios: axiosOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetAllComponentsQueryKey(params);
+  const queryKey =  queryOptions?.queryKey ?? getGetAllComponentsQueryKey();
 
   
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAllComponents>>> = ({ signal }) => getAllComponents(params, { signal, ...axiosOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAllComponents>>> = ({ signal }) => getAllComponents({ signal, ...axiosOptions });
 
       
 
@@ -301,7 +296,7 @@ export type GetAllComponentsQueryError = AxiosError<unknown>
 
 
 export function useGetAllComponents<TData = Awaited<ReturnType<typeof getAllComponents>>, TError = AxiosError<unknown>>(
- params: undefined |  GetAllComponentsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllComponents>>, TError, TData>> & Pick<
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllComponents>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getAllComponents>>,
           TError,
@@ -311,7 +306,7 @@ export function useGetAllComponents<TData = Awaited<ReturnType<typeof getAllComp
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetAllComponents<TData = Awaited<ReturnType<typeof getAllComponents>>, TError = AxiosError<unknown>>(
- params?: GetAllComponentsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllComponents>>, TError, TData>> & Pick<
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllComponents>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getAllComponents>>,
           TError,
@@ -321,19 +316,19 @@ export function useGetAllComponents<TData = Awaited<ReturnType<typeof getAllComp
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetAllComponents<TData = Awaited<ReturnType<typeof getAllComponents>>, TError = AxiosError<unknown>>(
- params?: GetAllComponentsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllComponents>>, TError, TData>>, axios?: AxiosRequestConfig}
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllComponents>>, TError, TData>>, axios?: AxiosRequestConfig}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
- * @summary Get all components (paginated)
+ * @summary Get all components
  */
 
 export function useGetAllComponents<TData = Awaited<ReturnType<typeof getAllComponents>>, TError = AxiosError<unknown>>(
- params?: GetAllComponentsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllComponents>>, TError, TData>>, axios?: AxiosRequestConfig}
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllComponents>>, TError, TData>>, axios?: AxiosRequestConfig}
  , queryClient?: QueryClient 
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetAllComponentsQueryOptions(params,options)
+  const queryOptions = getGetAllComponentsQueryOptions(options)
 
   const query = useQuery(queryOptions , queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -407,40 +402,35 @@ export const useCreateComponent = <TError = AxiosError<unknown>,
       return useMutation(mutationOptions , queryClient);
     }
     /**
- * Retrieve paginated components of a specific type
- * @summary Get components by type (paginated)
+ * Retrieve all components of a specific type
+ * @summary Get components by type
  */
 export const getComponentsByType = (
-    type: 'CPU' | 'GPU' | 'RAM' | 'SSD' | 'HDD' | 'Motherboard' | 'PSU' | 'Case' | 'Cooler',
-    params?: GetComponentsByTypeParams, options?: AxiosRequestConfig
- ): Promise<AxiosResponse<PageComponentResponse>> => {
+    type: 'CPU' | 'GPU' | 'RAM' | 'SSD' | 'HDD' | 'Motherboard' | 'PSU' | 'Case' | 'Cooler', options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<ComponentResponse[]>> => {
     
     
     return axios.default.get(
-      `/api/v1/components/type/${type}`,{
-    ...options,
-        params: {...params, ...options?.params},}
+      `/api/v1/components/type/${type}`,options
     );
   }
 
 
-export const getGetComponentsByTypeQueryKey = (type?: 'CPU' | 'GPU' | 'RAM' | 'SSD' | 'HDD' | 'Motherboard' | 'PSU' | 'Case' | 'Cooler',
-    params?: GetComponentsByTypeParams,) => {
-    return [`/api/v1/components/type/${type}`, ...(params ? [params]: [])] as const;
+export const getGetComponentsByTypeQueryKey = (type?: 'CPU' | 'GPU' | 'RAM' | 'SSD' | 'HDD' | 'Motherboard' | 'PSU' | 'Case' | 'Cooler',) => {
+    return [`/api/v1/components/type/${type}`] as const;
     }
 
     
-export const getGetComponentsByTypeQueryOptions = <TData = Awaited<ReturnType<typeof getComponentsByType>>, TError = AxiosError<unknown>>(type: 'CPU' | 'GPU' | 'RAM' | 'SSD' | 'HDD' | 'Motherboard' | 'PSU' | 'Case' | 'Cooler',
-    params?: GetComponentsByTypeParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getComponentsByType>>, TError, TData>>, axios?: AxiosRequestConfig}
+export const getGetComponentsByTypeQueryOptions = <TData = Awaited<ReturnType<typeof getComponentsByType>>, TError = AxiosError<unknown>>(type: 'CPU' | 'GPU' | 'RAM' | 'SSD' | 'HDD' | 'Motherboard' | 'PSU' | 'Case' | 'Cooler', options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getComponentsByType>>, TError, TData>>, axios?: AxiosRequestConfig}
 ) => {
 
 const {query: queryOptions, axios: axiosOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetComponentsByTypeQueryKey(type,params);
+  const queryKey =  queryOptions?.queryKey ?? getGetComponentsByTypeQueryKey(type);
 
   
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getComponentsByType>>> = ({ signal }) => getComponentsByType(type,params, { signal, ...axiosOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getComponentsByType>>> = ({ signal }) => getComponentsByType(type, { signal, ...axiosOptions });
 
       
 
@@ -454,8 +444,7 @@ export type GetComponentsByTypeQueryError = AxiosError<unknown>
 
 
 export function useGetComponentsByType<TData = Awaited<ReturnType<typeof getComponentsByType>>, TError = AxiosError<unknown>>(
- type: 'CPU' | 'GPU' | 'RAM' | 'SSD' | 'HDD' | 'Motherboard' | 'PSU' | 'Case' | 'Cooler',
-    params: undefined |  GetComponentsByTypeParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getComponentsByType>>, TError, TData>> & Pick<
+ type: 'CPU' | 'GPU' | 'RAM' | 'SSD' | 'HDD' | 'Motherboard' | 'PSU' | 'Case' | 'Cooler', options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getComponentsByType>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getComponentsByType>>,
           TError,
@@ -465,8 +454,7 @@ export function useGetComponentsByType<TData = Awaited<ReturnType<typeof getComp
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetComponentsByType<TData = Awaited<ReturnType<typeof getComponentsByType>>, TError = AxiosError<unknown>>(
- type: 'CPU' | 'GPU' | 'RAM' | 'SSD' | 'HDD' | 'Motherboard' | 'PSU' | 'Case' | 'Cooler',
-    params?: GetComponentsByTypeParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getComponentsByType>>, TError, TData>> & Pick<
+ type: 'CPU' | 'GPU' | 'RAM' | 'SSD' | 'HDD' | 'Motherboard' | 'PSU' | 'Case' | 'Cooler', options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getComponentsByType>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getComponentsByType>>,
           TError,
@@ -476,21 +464,19 @@ export function useGetComponentsByType<TData = Awaited<ReturnType<typeof getComp
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetComponentsByType<TData = Awaited<ReturnType<typeof getComponentsByType>>, TError = AxiosError<unknown>>(
- type: 'CPU' | 'GPU' | 'RAM' | 'SSD' | 'HDD' | 'Motherboard' | 'PSU' | 'Case' | 'Cooler',
-    params?: GetComponentsByTypeParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getComponentsByType>>, TError, TData>>, axios?: AxiosRequestConfig}
+ type: 'CPU' | 'GPU' | 'RAM' | 'SSD' | 'HDD' | 'Motherboard' | 'PSU' | 'Case' | 'Cooler', options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getComponentsByType>>, TError, TData>>, axios?: AxiosRequestConfig}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
- * @summary Get components by type (paginated)
+ * @summary Get components by type
  */
 
 export function useGetComponentsByType<TData = Awaited<ReturnType<typeof getComponentsByType>>, TError = AxiosError<unknown>>(
- type: 'CPU' | 'GPU' | 'RAM' | 'SSD' | 'HDD' | 'Motherboard' | 'PSU' | 'Case' | 'Cooler',
-    params?: GetComponentsByTypeParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getComponentsByType>>, TError, TData>>, axios?: AxiosRequestConfig}
+ type: 'CPU' | 'GPU' | 'RAM' | 'SSD' | 'HDD' | 'Motherboard' | 'PSU' | 'Case' | 'Cooler', options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getComponentsByType>>, TError, TData>>, axios?: AxiosRequestConfig}
  , queryClient?: QueryClient 
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetComponentsByTypeQueryOptions(type,params,options)
+  const queryOptions = getGetComponentsByTypeQueryOptions(type,options)
 
   const query = useQuery(queryOptions , queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -925,92 +911,6 @@ export function useGetComponentsByBrand<TData = Awaited<ReturnType<typeof getCom
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetComponentsByBrandQueryOptions(brand,options)
-
-  const query = useQuery(queryOptions , queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  query.queryKey = queryOptions.queryKey ;
-
-  return query;
-}
-
-
-
-/**
- * Retrieve all components - kept for backwards compatibility
- * @summary Get all components (non-paginated)
- */
-export const getAllComponentsList = (
-     options?: AxiosRequestConfig
- ): Promise<AxiosResponse<ComponentResponse[]>> => {
-    
-    
-    return axios.default.get(
-      `/api/v1/components/all`,options
-    );
-  }
-
-
-export const getGetAllComponentsListQueryKey = () => {
-    return [`/api/v1/components/all`] as const;
-    }
-
-    
-export const getGetAllComponentsListQueryOptions = <TData = Awaited<ReturnType<typeof getAllComponentsList>>, TError = AxiosError<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllComponentsList>>, TError, TData>>, axios?: AxiosRequestConfig}
-) => {
-
-const {query: queryOptions, axios: axiosOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetAllComponentsListQueryKey();
-
-  
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAllComponentsList>>> = ({ signal }) => getAllComponentsList({ signal, ...axiosOptions });
-
-      
-
-      
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAllComponentsList>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type GetAllComponentsListQueryResult = NonNullable<Awaited<ReturnType<typeof getAllComponentsList>>>
-export type GetAllComponentsListQueryError = AxiosError<unknown>
-
-
-export function useGetAllComponentsList<TData = Awaited<ReturnType<typeof getAllComponentsList>>, TError = AxiosError<unknown>>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllComponentsList>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getAllComponentsList>>,
-          TError,
-          Awaited<ReturnType<typeof getAllComponentsList>>
-        > , 'initialData'
-      >, axios?: AxiosRequestConfig}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetAllComponentsList<TData = Awaited<ReturnType<typeof getAllComponentsList>>, TError = AxiosError<unknown>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllComponentsList>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getAllComponentsList>>,
-          TError,
-          Awaited<ReturnType<typeof getAllComponentsList>>
-        > , 'initialData'
-      >, axios?: AxiosRequestConfig}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetAllComponentsList<TData = Awaited<ReturnType<typeof getAllComponentsList>>, TError = AxiosError<unknown>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllComponentsList>>, TError, TData>>, axios?: AxiosRequestConfig}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-/**
- * @summary Get all components (non-paginated)
- */
-
-export function useGetAllComponentsList<TData = Awaited<ReturnType<typeof getAllComponentsList>>, TError = AxiosError<unknown>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllComponentsList>>, TError, TData>>, axios?: AxiosRequestConfig}
- , queryClient?: QueryClient 
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getGetAllComponentsListQueryOptions(options)
 
   const query = useQuery(queryOptions , queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
