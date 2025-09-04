@@ -34,8 +34,14 @@ import type {
 import type {
   ComponentRequest,
   ComponentResponse,
+  GetAllComponentsPagedParams,
+  GetComponentsByBrandPagedParams,
+  GetComponentsByTypePagedParams,
+  GetComponentsInStockPagedParams,
   GetComponentsInStockParams,
   MessageResponse,
+  PagedResponseComponentResponse,
+  SearchComponentsPagedParams,
   SearchComponentsParams
 } from '.././model';
 
@@ -130,8 +136,8 @@ export function useGetComponentById<TData = Awaited<ReturnType<typeof getCompone
 
 
 /**
- * Update an existing component by ID
- * @summary Update a component
+ * Update a component in the catalog
+ * @summary Update an existing component
  */
 export const updateComponent = (
     id: number,
@@ -177,7 +183,7 @@ const {mutation: mutationOptions, axios: axiosOptions} = options ?
     export type UpdateComponentMutationError = AxiosError<ComponentResponse>
 
     /**
- * @summary Update a component
+ * @summary Update an existing component
  */
 export const useUpdateComponent = <TError = AxiosError<ComponentResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateComponent>>, TError,{id: number;data: ComponentRequest}, TContext>, axios?: AxiosRequestConfig}
@@ -193,7 +199,7 @@ export const useUpdateComponent = <TError = AxiosError<ComponentResponse>,
       return useMutation(mutationOptions , queryClient);
     }
     /**
- * Delete a component by ID
+ * Remove a component from the catalog
  * @summary Delete a component
  */
 export const deleteComponent = (
@@ -254,7 +260,7 @@ export const useDeleteComponent = <TError = AxiosError<MessageResponse>,
       return useMutation(mutationOptions , queryClient);
     }
     /**
- * Retrieve all components in the catalog
+ * Retrieve all components in the catalog (non-paginated)
  * @summary Get all components
  */
 export const getAllComponents = (
@@ -402,7 +408,7 @@ export const useCreateComponent = <TError = AxiosError<unknown>,
       return useMutation(mutationOptions , queryClient);
     }
     /**
- * Retrieve all components of a specific type
+ * Retrieve all components of a specific type (non-paginated)
  * @summary Get components by type
  */
 export const getComponentsByType = (
@@ -488,7 +494,102 @@ export function useGetComponentsByType<TData = Awaited<ReturnType<typeof getComp
 
 
 /**
- * Retrieve components filtered by socket
+ * Retrieve components of a specific type with pagination
+ * @summary Get components by type (paginated)
+ */
+export const getComponentsByTypePaged = (
+    type: 'CPU' | 'GPU' | 'RAM' | 'SSD' | 'HDD' | 'Motherboard' | 'PSU' | 'Case' | 'Cooler',
+    params?: GetComponentsByTypePagedParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<PagedResponseComponentResponse>> => {
+    
+    
+    return axios.default.get(
+      `/api/v1/components/type/${type}/paged`,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+
+export const getGetComponentsByTypePagedQueryKey = (type?: 'CPU' | 'GPU' | 'RAM' | 'SSD' | 'HDD' | 'Motherboard' | 'PSU' | 'Case' | 'Cooler',
+    params?: GetComponentsByTypePagedParams,) => {
+    return [`/api/v1/components/type/${type}/paged`, ...(params ? [params]: [])] as const;
+    }
+
+    
+export const getGetComponentsByTypePagedQueryOptions = <TData = Awaited<ReturnType<typeof getComponentsByTypePaged>>, TError = AxiosError<unknown>>(type: 'CPU' | 'GPU' | 'RAM' | 'SSD' | 'HDD' | 'Motherboard' | 'PSU' | 'Case' | 'Cooler',
+    params?: GetComponentsByTypePagedParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getComponentsByTypePaged>>, TError, TData>>, axios?: AxiosRequestConfig}
+) => {
+
+const {query: queryOptions, axios: axiosOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetComponentsByTypePagedQueryKey(type,params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getComponentsByTypePaged>>> = ({ signal }) => getComponentsByTypePaged(type,params, { signal, ...axiosOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(type), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getComponentsByTypePaged>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetComponentsByTypePagedQueryResult = NonNullable<Awaited<ReturnType<typeof getComponentsByTypePaged>>>
+export type GetComponentsByTypePagedQueryError = AxiosError<unknown>
+
+
+export function useGetComponentsByTypePaged<TData = Awaited<ReturnType<typeof getComponentsByTypePaged>>, TError = AxiosError<unknown>>(
+ type: 'CPU' | 'GPU' | 'RAM' | 'SSD' | 'HDD' | 'Motherboard' | 'PSU' | 'Case' | 'Cooler',
+    params: undefined |  GetComponentsByTypePagedParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getComponentsByTypePaged>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getComponentsByTypePaged>>,
+          TError,
+          Awaited<ReturnType<typeof getComponentsByTypePaged>>
+        > , 'initialData'
+      >, axios?: AxiosRequestConfig}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetComponentsByTypePaged<TData = Awaited<ReturnType<typeof getComponentsByTypePaged>>, TError = AxiosError<unknown>>(
+ type: 'CPU' | 'GPU' | 'RAM' | 'SSD' | 'HDD' | 'Motherboard' | 'PSU' | 'Case' | 'Cooler',
+    params?: GetComponentsByTypePagedParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getComponentsByTypePaged>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getComponentsByTypePaged>>,
+          TError,
+          Awaited<ReturnType<typeof getComponentsByTypePaged>>
+        > , 'initialData'
+      >, axios?: AxiosRequestConfig}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetComponentsByTypePaged<TData = Awaited<ReturnType<typeof getComponentsByTypePaged>>, TError = AxiosError<unknown>>(
+ type: 'CPU' | 'GPU' | 'RAM' | 'SSD' | 'HDD' | 'Motherboard' | 'PSU' | 'Case' | 'Cooler',
+    params?: GetComponentsByTypePagedParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getComponentsByTypePaged>>, TError, TData>>, axios?: AxiosRequestConfig}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get components by type (paginated)
+ */
+
+export function useGetComponentsByTypePaged<TData = Awaited<ReturnType<typeof getComponentsByTypePaged>>, TError = AxiosError<unknown>>(
+ type: 'CPU' | 'GPU' | 'RAM' | 'SSD' | 'HDD' | 'Motherboard' | 'PSU' | 'Case' | 'Cooler',
+    params?: GetComponentsByTypePagedParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getComponentsByTypePaged>>, TError, TData>>, axios?: AxiosRequestConfig}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetComponentsByTypePagedQueryOptions(type,params,options)
+
+  const query = useQuery(queryOptions , queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+/**
+ * Retrieve components filtered by socket type
  * @summary Get components by socket
  */
 export const getComponentsBySocket = (
@@ -662,6 +763,182 @@ export function useSearchComponents<TData = Awaited<ReturnType<typeof searchComp
 
 
 /**
+ * Search components with multiple filters and pagination
+ * @summary Search components (paginated)
+ */
+export const searchComponentsPaged = (
+    params?: SearchComponentsPagedParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<PagedResponseComponentResponse>> => {
+    
+    
+    return axios.default.get(
+      `/api/v1/components/search/paged`,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+
+export const getSearchComponentsPagedQueryKey = (params?: SearchComponentsPagedParams,) => {
+    return [`/api/v1/components/search/paged`, ...(params ? [params]: [])] as const;
+    }
+
+    
+export const getSearchComponentsPagedQueryOptions = <TData = Awaited<ReturnType<typeof searchComponentsPaged>>, TError = AxiosError<unknown>>(params?: SearchComponentsPagedParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof searchComponentsPaged>>, TError, TData>>, axios?: AxiosRequestConfig}
+) => {
+
+const {query: queryOptions, axios: axiosOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getSearchComponentsPagedQueryKey(params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof searchComponentsPaged>>> = ({ signal }) => searchComponentsPaged(params, { signal, ...axiosOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof searchComponentsPaged>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type SearchComponentsPagedQueryResult = NonNullable<Awaited<ReturnType<typeof searchComponentsPaged>>>
+export type SearchComponentsPagedQueryError = AxiosError<unknown>
+
+
+export function useSearchComponentsPaged<TData = Awaited<ReturnType<typeof searchComponentsPaged>>, TError = AxiosError<unknown>>(
+ params: undefined |  SearchComponentsPagedParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof searchComponentsPaged>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof searchComponentsPaged>>,
+          TError,
+          Awaited<ReturnType<typeof searchComponentsPaged>>
+        > , 'initialData'
+      >, axios?: AxiosRequestConfig}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useSearchComponentsPaged<TData = Awaited<ReturnType<typeof searchComponentsPaged>>, TError = AxiosError<unknown>>(
+ params?: SearchComponentsPagedParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof searchComponentsPaged>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof searchComponentsPaged>>,
+          TError,
+          Awaited<ReturnType<typeof searchComponentsPaged>>
+        > , 'initialData'
+      >, axios?: AxiosRequestConfig}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useSearchComponentsPaged<TData = Awaited<ReturnType<typeof searchComponentsPaged>>, TError = AxiosError<unknown>>(
+ params?: SearchComponentsPagedParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof searchComponentsPaged>>, TError, TData>>, axios?: AxiosRequestConfig}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Search components (paginated)
+ */
+
+export function useSearchComponentsPaged<TData = Awaited<ReturnType<typeof searchComponentsPaged>>, TError = AxiosError<unknown>>(
+ params?: SearchComponentsPagedParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof searchComponentsPaged>>, TError, TData>>, axios?: AxiosRequestConfig}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getSearchComponentsPagedQueryOptions(params,options)
+
+  const query = useQuery(queryOptions , queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+/**
+ * Retrieve all components with pagination support
+ * @summary Get all components (paginated)
+ */
+export const getAllComponentsPaged = (
+    params?: GetAllComponentsPagedParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<PagedResponseComponentResponse>> => {
+    
+    
+    return axios.default.get(
+      `/api/v1/components/paged`,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+
+export const getGetAllComponentsPagedQueryKey = (params?: GetAllComponentsPagedParams,) => {
+    return [`/api/v1/components/paged`, ...(params ? [params]: [])] as const;
+    }
+
+    
+export const getGetAllComponentsPagedQueryOptions = <TData = Awaited<ReturnType<typeof getAllComponentsPaged>>, TError = AxiosError<unknown>>(params?: GetAllComponentsPagedParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllComponentsPaged>>, TError, TData>>, axios?: AxiosRequestConfig}
+) => {
+
+const {query: queryOptions, axios: axiosOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAllComponentsPagedQueryKey(params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAllComponentsPaged>>> = ({ signal }) => getAllComponentsPaged(params, { signal, ...axiosOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAllComponentsPaged>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetAllComponentsPagedQueryResult = NonNullable<Awaited<ReturnType<typeof getAllComponentsPaged>>>
+export type GetAllComponentsPagedQueryError = AxiosError<unknown>
+
+
+export function useGetAllComponentsPaged<TData = Awaited<ReturnType<typeof getAllComponentsPaged>>, TError = AxiosError<unknown>>(
+ params: undefined |  GetAllComponentsPagedParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllComponentsPaged>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAllComponentsPaged>>,
+          TError,
+          Awaited<ReturnType<typeof getAllComponentsPaged>>
+        > , 'initialData'
+      >, axios?: AxiosRequestConfig}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAllComponentsPaged<TData = Awaited<ReturnType<typeof getAllComponentsPaged>>, TError = AxiosError<unknown>>(
+ params?: GetAllComponentsPagedParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllComponentsPaged>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAllComponentsPaged>>,
+          TError,
+          Awaited<ReturnType<typeof getAllComponentsPaged>>
+        > , 'initialData'
+      >, axios?: AxiosRequestConfig}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAllComponentsPaged<TData = Awaited<ReturnType<typeof getAllComponentsPaged>>, TError = AxiosError<unknown>>(
+ params?: GetAllComponentsPagedParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllComponentsPaged>>, TError, TData>>, axios?: AxiosRequestConfig}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get all components (paginated)
+ */
+
+export function useGetAllComponentsPaged<TData = Awaited<ReturnType<typeof getAllComponentsPaged>>, TError = AxiosError<unknown>>(
+ params?: GetAllComponentsPagedParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAllComponentsPaged>>, TError, TData>>, axios?: AxiosRequestConfig}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetAllComponentsPagedQueryOptions(params,options)
+
+  const query = useQuery(queryOptions , queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+/**
  * Retrieve components with at least minQuantity in stock
  * @summary Get components in stock
  */
@@ -739,6 +1016,94 @@ export function useGetComponentsInStock<TData = Awaited<ReturnType<typeof getCom
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetComponentsInStockQueryOptions(params,options)
+
+  const query = useQuery(queryOptions , queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+/**
+ * Retrieve components in stock with pagination
+ * @summary Get components in stock (paginated)
+ */
+export const getComponentsInStockPaged = (
+    params?: GetComponentsInStockPagedParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<PagedResponseComponentResponse>> => {
+    
+    
+    return axios.default.get(
+      `/api/v1/components/in-stock/paged`,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+
+export const getGetComponentsInStockPagedQueryKey = (params?: GetComponentsInStockPagedParams,) => {
+    return [`/api/v1/components/in-stock/paged`, ...(params ? [params]: [])] as const;
+    }
+
+    
+export const getGetComponentsInStockPagedQueryOptions = <TData = Awaited<ReturnType<typeof getComponentsInStockPaged>>, TError = AxiosError<unknown>>(params?: GetComponentsInStockPagedParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getComponentsInStockPaged>>, TError, TData>>, axios?: AxiosRequestConfig}
+) => {
+
+const {query: queryOptions, axios: axiosOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetComponentsInStockPagedQueryKey(params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getComponentsInStockPaged>>> = ({ signal }) => getComponentsInStockPaged(params, { signal, ...axiosOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getComponentsInStockPaged>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetComponentsInStockPagedQueryResult = NonNullable<Awaited<ReturnType<typeof getComponentsInStockPaged>>>
+export type GetComponentsInStockPagedQueryError = AxiosError<unknown>
+
+
+export function useGetComponentsInStockPaged<TData = Awaited<ReturnType<typeof getComponentsInStockPaged>>, TError = AxiosError<unknown>>(
+ params: undefined |  GetComponentsInStockPagedParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getComponentsInStockPaged>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getComponentsInStockPaged>>,
+          TError,
+          Awaited<ReturnType<typeof getComponentsInStockPaged>>
+        > , 'initialData'
+      >, axios?: AxiosRequestConfig}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetComponentsInStockPaged<TData = Awaited<ReturnType<typeof getComponentsInStockPaged>>, TError = AxiosError<unknown>>(
+ params?: GetComponentsInStockPagedParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getComponentsInStockPaged>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getComponentsInStockPaged>>,
+          TError,
+          Awaited<ReturnType<typeof getComponentsInStockPaged>>
+        > , 'initialData'
+      >, axios?: AxiosRequestConfig}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetComponentsInStockPaged<TData = Awaited<ReturnType<typeof getComponentsInStockPaged>>, TError = AxiosError<unknown>>(
+ params?: GetComponentsInStockPagedParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getComponentsInStockPaged>>, TError, TData>>, axios?: AxiosRequestConfig}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get components in stock (paginated)
+ */
+
+export function useGetComponentsInStockPaged<TData = Awaited<ReturnType<typeof getComponentsInStockPaged>>, TError = AxiosError<unknown>>(
+ params?: GetComponentsInStockPagedParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getComponentsInStockPaged>>, TError, TData>>, axios?: AxiosRequestConfig}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetComponentsInStockPagedQueryOptions(params,options)
 
   const query = useQuery(queryOptions , queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -836,7 +1201,7 @@ export function useGetComponentsByCompatibilityTag<TData = Awaited<ReturnType<ty
 
 
 /**
- * Retrieve components filtered by brand
+ * Retrieve all components from a specific brand
  * @summary Get components by brand
  */
 export const getComponentsByBrand = (
@@ -911,6 +1276,101 @@ export function useGetComponentsByBrand<TData = Awaited<ReturnType<typeof getCom
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetComponentsByBrandQueryOptions(brand,options)
+
+  const query = useQuery(queryOptions , queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+/**
+ * Retrieve components by brand with pagination
+ * @summary Get components by brand (paginated)
+ */
+export const getComponentsByBrandPaged = (
+    brand: string,
+    params?: GetComponentsByBrandPagedParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<PagedResponseComponentResponse>> => {
+    
+    
+    return axios.default.get(
+      `/api/v1/components/brand/${brand}/paged`,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+
+export const getGetComponentsByBrandPagedQueryKey = (brand?: string,
+    params?: GetComponentsByBrandPagedParams,) => {
+    return [`/api/v1/components/brand/${brand}/paged`, ...(params ? [params]: [])] as const;
+    }
+
+    
+export const getGetComponentsByBrandPagedQueryOptions = <TData = Awaited<ReturnType<typeof getComponentsByBrandPaged>>, TError = AxiosError<unknown>>(brand: string,
+    params?: GetComponentsByBrandPagedParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getComponentsByBrandPaged>>, TError, TData>>, axios?: AxiosRequestConfig}
+) => {
+
+const {query: queryOptions, axios: axiosOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetComponentsByBrandPagedQueryKey(brand,params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getComponentsByBrandPaged>>> = ({ signal }) => getComponentsByBrandPaged(brand,params, { signal, ...axiosOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(brand), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getComponentsByBrandPaged>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetComponentsByBrandPagedQueryResult = NonNullable<Awaited<ReturnType<typeof getComponentsByBrandPaged>>>
+export type GetComponentsByBrandPagedQueryError = AxiosError<unknown>
+
+
+export function useGetComponentsByBrandPaged<TData = Awaited<ReturnType<typeof getComponentsByBrandPaged>>, TError = AxiosError<unknown>>(
+ brand: string,
+    params: undefined |  GetComponentsByBrandPagedParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getComponentsByBrandPaged>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getComponentsByBrandPaged>>,
+          TError,
+          Awaited<ReturnType<typeof getComponentsByBrandPaged>>
+        > , 'initialData'
+      >, axios?: AxiosRequestConfig}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetComponentsByBrandPaged<TData = Awaited<ReturnType<typeof getComponentsByBrandPaged>>, TError = AxiosError<unknown>>(
+ brand: string,
+    params?: GetComponentsByBrandPagedParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getComponentsByBrandPaged>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getComponentsByBrandPaged>>,
+          TError,
+          Awaited<ReturnType<typeof getComponentsByBrandPaged>>
+        > , 'initialData'
+      >, axios?: AxiosRequestConfig}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetComponentsByBrandPaged<TData = Awaited<ReturnType<typeof getComponentsByBrandPaged>>, TError = AxiosError<unknown>>(
+ brand: string,
+    params?: GetComponentsByBrandPagedParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getComponentsByBrandPaged>>, TError, TData>>, axios?: AxiosRequestConfig}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get components by brand (paginated)
+ */
+
+export function useGetComponentsByBrandPaged<TData = Awaited<ReturnType<typeof getComponentsByBrandPaged>>, TError = AxiosError<unknown>>(
+ brand: string,
+    params?: GetComponentsByBrandPagedParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getComponentsByBrandPaged>>, TError, TData>>, axios?: AxiosRequestConfig}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetComponentsByBrandPagedQueryOptions(brand,params,options)
 
   const query = useQuery(queryOptions , queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
