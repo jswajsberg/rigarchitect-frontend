@@ -5,6 +5,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetAllComponents,
   useGetComponentsByType,
+  useGetAllComponentsPaged,
+  useGetComponentsByTypePaged,
 } from "../api/component-controller/component-controller";
 import {
   useCreateItem,
@@ -19,6 +21,8 @@ import type {
   ComponentResponse,
   CartItemRequest,
   CartItemResponse,
+  GetAllComponentsPagedParams,
+  GetComponentsByTypePagedParams,
 } from "../api/model";
 import ComponentCard from "../components/ComponentCard";
 import SearchBar from "../components/SearchBar";
@@ -123,6 +127,11 @@ const ComponentCatalog: React.FC = () => {
   });
   const [inStockOnly, setInStockOnly] = useState(false);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(0);
+  const [pageSize] = useState(12); // Fixed page size
+  const [usePagination, setUsePagination] = useState(true);
+
   // Component types with associated icons - centralized for consistency
   const componentTypes = [
     {
@@ -181,31 +190,124 @@ const ComponentCatalog: React.FC = () => {
     },
   ];
 
-  // Fetch all components
+  // Pagination parameters
+  const paginationParams: GetAllComponentsPagedParams = {
+    page: currentPage,
+    size: pageSize,
+    sortBy: "name",
+    sortDirection: "asc",
+  };
+
+  const typePaginationParams: GetComponentsByTypePagedParams = {
+    page: currentPage,
+    size: pageSize,
+    sortBy: "name",
+    sortDirection: "asc",
+  };
+
+  // Fetch all components (non-paginated - for backward compatibility)
   const {
     data: allComponents,
-    isLoading,
-    error,
-    refetch,
-  } = useGetAllComponents();
+    isLoading: allComponentsLoading,
+    error: allComponentsError,
+    refetch: refetchAll,
+  } = useGetAllComponents({
+    query: { enabled: !usePagination },
+  });
 
-  // Fetch components of selected type
-  const { data: typeComponents, error: typeError } = useGetComponentsByType(
-    selectedType as any,
-    {
-      query: { enabled: !!selectedType },
-    }
-  );
+  // Fetch all components (paginated)
+  const {
+    data: allComponentsPaged,
+    isLoading: allComponentsPagedLoading,
+    error: allComponentsPagedError,
+    refetch: refetchAllPaged,
+  } = useGetAllComponentsPaged(paginationParams, {
+    query: { enabled: usePagination && !selectedType },
+  });
+
+  // Fetch components of selected type (non-paginated)
+  const {
+    data: typeComponents,
+    error: typeError,
+  } = useGetComponentsByType(selectedType as any, {
+    query: { enabled: !usePagination && !!selectedType },
+  });
+
+  // Fetch components of selected type (paginated)
+  const {
+    data: typeComponentsPaged,
+    isLoading: typeComponentsPagedLoading,
+    error: typeComponentsPagedError,
+    refetch: refetchTypePaged,
+  } = useGetComponentsByTypePaged(selectedType as any, typePaginationParams, {
+    query: { enabled: usePagination && !!selectedType },
+  });
+
+  // Determine which data source to use
+  const isLoading = usePagination
+    ? selectedType
+      ? typeComponentsPagedLoading
+      : allComponentsPagedLoading
+    : selectedType
+    ? false
+    : allComponentsLoading;
+
+  const error = usePagination
+    ? selectedType
+      ? typeComponentsPagedError
+      : allComponentsPagedError
+    : selectedType
+    ? typeError
+    : allComponentsError;
+
+  const refetch = usePagination
+    ? selectedType
+      ? refetchTypePaged
+      : refetchAllPaged
+    : selectedType
+    ? () => {}
+    : refetchAll;
+
+  // Get current page data
+  const currentPageData = usePagination
+    ? selectedType
+      ? typeComponentsPaged?.data
+      : allComponentsPaged?.data
+    : null;
+
+  const paginationInfo = currentPageData
+    ? {
+        totalPages: currentPageData.totalPages || 0,
+        currentPage: currentPageData.currentPage || 0,
+        totalElements: currentPageData.totalElements || 0,
+        hasNext: currentPageData.hasNext || false,
+        hasPrevious: currentPageData.hasPrevious || false,
+      }
+    : null;
 
   // Search and filter logic
   const displayedComponents = useMemo(() => {
     let components: ComponentResponse[] = [];
 
     // Determine which components to use
-    if (selectedType && typeComponents?.data) {
-      components = typeComponents.data;
-    } else if (allComponents?.data) {
-      components = allComponents.data;
+    if (usePagination) {
+      // Use paginated data (filtering is limited since it's already paginated)
+      if (selectedType && typeComponentsPaged?.data?.content) {
+        components = typeComponentsPaged.data.content;
+      } else if (allComponentsPaged?.data?.content) {
+        components = allComponentsPaged.data.content;
+      }
+      
+      // For paginated data, we can only apply client-side filters that don't conflict with server pagination
+      // In this case, we'll just return the paginated data as-is to keep it simple
+      return components;
+    } else {
+      // Use non-paginated data with full client-side filtering
+      if (selectedType && typeComponents?.data) {
+        components = typeComponents.data;
+      } else if (allComponents?.data) {
+        components = allComponents.data;
+      }
     }
 
     // Apply search term filter
@@ -273,6 +375,9 @@ const ComponentCatalog: React.FC = () => {
     inStockOnly,
     showAdvancedSearch,
     componentTypes,
+    usePagination,
+    allComponentsPaged,
+    typeComponentsPaged,
   ]);
 
   const searchStrategy = searchTerm.trim()
@@ -284,9 +389,25 @@ const ComponentCatalog: React.FC = () => {
       )
     : null;
 
-  // Loading states
-  const isSearchLoading = selectedType ? false : isLoading;
-  const searchError = selectedType ? typeError : error;
+  // Loading states  
+  const isSearchLoading = isLoading;
+  const searchError = error;
+
+  // Reset page when filters change
+  const resetPagination = () => {
+    setCurrentPage(0);
+  };
+
+  // Handle pagination controls
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleTogglePagination = () => {
+    setUsePagination(!usePagination);
+    setCurrentPage(0);
+  };
 
   // Ensure shopping cart exists
   const ensureShoppingCart = async () => {
@@ -660,6 +781,7 @@ const ComponentCatalog: React.FC = () => {
   // SearchBar prop handlers
   const handleSearchTermChange = (value: string) => {
     setSearchTerm(value);
+    resetPagination();
   };
 
   const handleToggleAdvancedSearch = () => {
@@ -668,10 +790,12 @@ const ComponentCatalog: React.FC = () => {
 
   const handleFilterChange = (key: string, value: string) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
+    resetPagination();
   };
 
   const handleInStockOnlyChange = (value: boolean) => {
     setInStockOnly(value);
+    resetPagination();
   };
 
   return (
@@ -705,9 +829,12 @@ const ComponentCatalog: React.FC = () => {
 
       {/* Component Type Categories */}
       <div className="mb-8">
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-3 items-center">
           <button
-            onClick={() => setSelectedType(null)}
+            onClick={() => {
+              setSelectedType(null);
+              resetPagination();
+            }}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               !selectedType
                 ? "bg-blue-600 text-white"
@@ -721,7 +848,10 @@ const ComponentCatalog: React.FC = () => {
             return (
               <button
                 key={type.id}
-                onClick={() => setSelectedType(type.id)}
+                onClick={() => {
+                  setSelectedType(type.id);
+                  resetPagination();
+                }}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   selectedType === type.id
                     ? "bg-blue-600 text-white"
@@ -733,6 +863,21 @@ const ComponentCatalog: React.FC = () => {
               </button>
             );
           })}
+          
+          {/* Pagination Toggle */}
+          <div className="ml-auto flex items-center gap-2 text-sm">
+            <span className="text-gray-600">Pagination:</span>
+            <button
+              onClick={handleTogglePagination}
+              className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                usePagination
+                  ? "bg-green-100 text-green-700"
+                  : "bg-gray-100 text-gray-600"
+              }`}
+            >
+              {usePagination ? "ON" : "OFF"}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -760,17 +905,80 @@ const ComponentCatalog: React.FC = () => {
 
         {/* Results Grid */}
         {!isSearchLoading && !searchError && displayedComponents.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {displayedComponents.map((component) => (
-              <ComponentCard
-                key={component.id}
-                component={component}
-                onAddToBuildCart={handleAddToBuildCart}
-                onAddToCheckoutCart={handleAddToCheckoutCart}
-                showCartButtons={true}
-              />
-            ))}
-          </div>
+          <>
+            {/* Results count and pagination info */}
+            {usePagination && paginationInfo && (
+              <div className="mb-4 text-sm text-gray-600">
+                Showing {((paginationInfo.currentPage || 0) * pageSize) + 1} - {Math.min(((paginationInfo.currentPage || 0) + 1) * pageSize, paginationInfo.totalElements)} of {paginationInfo.totalElements} components
+              </div>
+            )}
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {displayedComponents.map((component) => (
+                <ComponentCard
+                  key={component.id}
+                  component={component}
+                  onAddToBuildCart={handleAddToBuildCart}
+                  onAddToCheckoutCart={handleAddToCheckoutCart}
+                  showCartButtons={true}
+                />
+              ))}
+            </div>
+            
+            {/* Pagination Controls */}
+            {usePagination && paginationInfo && paginationInfo.totalPages > 1 && (
+              <div className="mt-8 flex justify-center items-center gap-2">
+                <button
+                  onClick={() => handlePageChange(paginationInfo.currentPage - 1)}
+                  disabled={!paginationInfo.hasPrevious}
+                  className="px-3 py-2 text-sm border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Previous
+                </button>
+                
+                <div className="flex gap-1">
+                  {Array.from({ length: Math.min(5, paginationInfo.totalPages) }, (_, i) => {
+                    let pageNum;
+                    if (paginationInfo.totalPages <= 5) {
+                      pageNum = i;
+                    } else if (paginationInfo.currentPage <= 2) {
+                      pageNum = i;
+                    } else if (paginationInfo.currentPage >= paginationInfo.totalPages - 3) {
+                      pageNum = paginationInfo.totalPages - 5 + i;
+                    } else {
+                      pageNum = paginationInfo.currentPage - 2 + i;
+                    }
+                    
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => handlePageChange(pageNum)}
+                        className={`px-3 py-2 text-sm border rounded-md ${
+                          pageNum === paginationInfo.currentPage
+                            ? "bg-blue-600 text-white border-blue-600"
+                            : "hover:bg-gray-50"
+                        }`}
+                      >
+                        {pageNum + 1}
+                      </button>
+                    );
+                  })}
+                </div>
+                
+                <button
+                  onClick={() => handlePageChange(paginationInfo.currentPage + 1)}
+                  disabled={!paginationInfo.hasNext}
+                  className="px-3 py-2 text-sm border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Next
+                </button>
+                
+                <div className="ml-4 text-sm text-gray-600">
+                  Page {paginationInfo.currentPage + 1} of {paginationInfo.totalPages}
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {/* No results state */}
