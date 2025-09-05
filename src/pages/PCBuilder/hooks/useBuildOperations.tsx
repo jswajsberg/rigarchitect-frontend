@@ -1,5 +1,5 @@
 // src/components/PCBuilder/hooks/useBuildOperations.tsx
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCart } from "../../../contexts/CartContext";
 import { useSelectedUserId } from "../../../contexts/UserContext";
@@ -18,15 +18,28 @@ import { useBuilder } from "../../../contexts/BuilderContext";
 interface UseBuildOperationsProps {
   selectedBuildItems?: { data?: Array<{ id?: number }> };
   createItemMutation: any; // Accept the mutation from parent
+  setHasUnsavedChanges?: (value: boolean) => void; // For clearing unsaved changes after save
+  lastOperationRef?: React.MutableRefObject<{ type: 'save' | 'load', timestamp: number } | null>; // For tracking recent operations
 }
 
 export const useBuildOperations = ({
   selectedBuildItems,
   createItemMutation,
+  setHasUnsavedChanges,
+  lastOperationRef,
 }: UseBuildOperationsProps) => {
   const queryClient = useQueryClient();
   const selectedUserId = useSelectedUserId();
   useCart();
+
+  // Modal states for replacing browser popups
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showSaveSuccess, setShowSaveSuccess] = useState(false);
+  const [showError, setShowError] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
+  const [modalMessage, setModalMessage] = useState({ title: "", message: "" });
+  const [clearConfirmMessage, setClearConfirmMessage] = useState("");
 
   // Get user carts to access shopping cart (DRAFT status)
   const { data: userCarts } = useGetUserCarts(selectedUserId || 0, {
@@ -39,6 +52,8 @@ export const useBuildOperations = ({
     setSelectedBuildId,
     currentBuild,
     setCurrentBuild,
+    // priceRange, // Unused in this hook
+    setPriceRange,
     buildName,
     setBuildName,
     isModifyingExisting,
@@ -55,12 +70,24 @@ export const useBuildOperations = ({
   // Save build (create new or update existing)
   const handleSaveBuild = useCallback(async (silent = false) => {
     if (!buildName.trim()) {
-      if (!silent) alert("Please enter a build name");
+      if (!silent) {
+        setModalMessage({
+          title: "Build Name Required",
+          message: "Please enter a build name before saving."
+        });
+        setShowError(true);
+      }
       return;
     }
 
     if (!selectedUserId) {
-      if (!silent) alert("Please select a user first");
+      if (!silent) {
+        setModalMessage({
+          title: "User Required",
+          message: "Please select a user before saving the build."
+        });
+        setShowError(true);
+      }
       return;
     }
 
@@ -144,16 +171,25 @@ export const useBuildOperations = ({
           componentCount > 0
             ? `with ${componentCount} components`
             : "(empty build)";
-        alert(`Build "${buildName}" saved successfully ${buildType}!`);
+        setModalMessage({
+          title: "Build Saved",
+          message: `Build "${buildName}" saved successfully ${buildType}!`
+        });
+        setShowSaveSuccess(true);
+      }
+      
+      // Clear unsaved changes flag after successful save
+      if (setHasUnsavedChanges) {
+        setHasUnsavedChanges(false);
       }
     } catch (error: any) {
       console.error("Failed to save build:", error);
       if (!silent) {
-        alert(
-          `Failed to save build: ${
-            error.response?.data?.message || error.message
-          }`
-        );
+        setModalMessage({
+          title: "Save Failed",
+          message: `Failed to save build: ${error.response?.data?.message || error.message}`
+        });
+        setShowError(true);
       }
     }
   }, [
@@ -186,37 +222,66 @@ export const useBuildOperations = ({
       } else {
         setBuildName("Untitled Build");
       }
+      
+      // Clear unsaved changes when loading a build
+      if (setHasUnsavedChanges) {
+        setHasUnsavedChanges(false);
+      }
+      
+      // Mark this as a load operation to prevent immediate unsaved changes flag
+      if (lastOperationRef) {
+        lastOperationRef.current = { type: 'load', timestamp: Date.now() };
+      }
     },
-    [setSelectedBuildId, setIsModifyingExisting, setBuildName]
+    [setSelectedBuildId, setIsModifyingExisting, setBuildName, setHasUnsavedChanges, lastOperationRef]
   );
 
   // Delete build
   const handleDeleteBuild = useCallback(
     async (buildId: number, buildNameParam: string) => {
-      const confirmDelete = window.confirm(
-        `Are you sure you want to delete "${buildNameParam}"? This action cannot be undone.`
-      );
-      if (!confirmDelete) return;
+      // Show confirmation modal instead of browser confirm
+      setDeleteTarget({ id: buildId, name: buildNameParam });
+      setShowDeleteConfirm(true);
+    },
+    []
+  );
 
-      try {
-        await deleteCartMutation.mutateAsync({ id: buildId });
+  // Execute delete after confirmation
+  const handleDeleteConfirmed = useCallback(async () => {
+    if (!deleteTarget) return;
 
-        queryClient.invalidateQueries({
-          queryKey: [`/api/v1/carts/user/${selectedUserId}`],
-        });
+    const { id: buildId, name: buildNameParam } = deleteTarget;
 
-        if (selectedBuildId === buildId) {
-          setSelectedBuildId(null);
-          setCurrentBuild({});
-          setBuildName("");
-          setIsModifyingExisting(false);
-        }
+    try {
+      await deleteCartMutation.mutateAsync({ id: buildId });
 
-        alert(`Build "${buildNameParam}" deleted successfully.`);
-      } catch (error: any) {
-        console.error("Failed to delete build:", error);
-        alert("Failed to delete build. Please try again.");
+      queryClient.invalidateQueries({
+        queryKey: [`/api/v1/carts/user/${selectedUserId}`],
+      });
+
+      if (selectedBuildId === buildId) {
+        setSelectedBuildId(null);
+        setCurrentBuild({});
+        setBuildName("");
+        setIsModifyingExisting(false);
       }
+
+      setModalMessage({
+        title: "Build Deleted",
+        message: `Build "${buildNameParam}" deleted successfully.`
+      });
+      setShowSaveSuccess(true);
+    } catch (error: any) {
+      console.error("Failed to delete build:", error);
+      setModalMessage({
+        title: "Delete Failed",
+        message: "Failed to delete build. Please try again."
+      });
+      setShowError(true);
+    } finally {
+      setDeleteTarget(null);
+      setShowDeleteConfirm(false);
+    }
     },
     [
       deleteCartMutation,
@@ -240,12 +305,17 @@ export const useBuildOperations = ({
 
     const isSavedBuild = selectedBuildId && isModifyingExisting;
     const confirmMessage = isSavedBuild 
-      ? `Are you sure you want to clear this saved build "${buildName}"? This will remove all ${componentCount} components from the saved build and cannot be undone.`
-      : `Are you sure you want to clear this build? This will remove all ${componentCount} selected components and cannot be undone.`;
+      ? `This will remove all ${componentCount} components from the saved build "${buildName}" and cannot be undone.`
+      : `This will remove all ${componentCount} selected components and cannot be undone.`;
 
-    const confirmClear = window.confirm(confirmMessage);
-    
-    if (!confirmClear) return;
+    setClearConfirmMessage(confirmMessage);
+    setShowClearConfirm(true);
+  }, [currentBuild, selectedBuildId, isModifyingExisting, buildName]);
+
+  // Execute clear after confirmation
+  const handleClearConfirmed = useCallback(async () => {
+    // const componentCount = Object.keys(currentBuild).length; // Unused
+    const isSavedBuild = selectedBuildId && isModifyingExisting;
 
     try {
       // If this is a saved build, remove all items from the database
@@ -269,11 +339,21 @@ export const useBuildOperations = ({
       setIsModifyingExisting(false);
 
       if (isSavedBuild) {
-        alert(`Saved build "${buildName}" has been cleared of all components.`);
+        setModalMessage({
+          title: "Build Cleared",
+          message: `Saved build "${buildName}" has been cleared of all components.`
+        });
+        setShowSaveSuccess(true);
       }
     } catch (error: any) {
       console.error("Failed to clear build:", error);
-      alert("Failed to clear build. Please try again.");
+      setModalMessage({
+        title: "Clear Failed",
+        message: "Failed to clear build. Please try again."
+      });
+      setShowError(true);
+    } finally {
+      setShowClearConfirm(false);
     }
   }, [
     currentBuild,
@@ -291,9 +371,13 @@ export const useBuildOperations = ({
 
   // Create new build with name confirmation
   const handleBuildNameConfirm = useCallback(
-    async (newBuildName: string) => {
+    async (newBuildName: string, priceRange?: { min: number; max: number }) => {
       if (!selectedUserId) {
-        alert("Please select a user first");
+        setModalMessage({
+          title: "User Required",
+          message: "Please select a user before creating a build."
+        });
+        setShowError(true);
         return;
       }
 
@@ -301,7 +385,11 @@ export const useBuildOperations = ({
       const cleanBuildName = String(newBuildName).trim();
       
       if (!cleanBuildName) {
-        alert("Build name cannot be empty");
+        setModalMessage({
+          title: "Build Name Required",
+          message: "Build name cannot be empty."
+        });
+        setShowError(true);
         return;
       }
 
@@ -319,6 +407,16 @@ export const useBuildOperations = ({
         setBuildName(cleanBuildName);
         setSelectedBuildId(newBuildId);
         setIsModifyingExisting(true);
+        
+        // Set custom price range if provided
+        if (priceRange) {
+          setPriceRange(priceRange);
+        }
+
+        // Clear unsaved changes flag when creating new build
+        if (setHasUnsavedChanges) {
+          setHasUnsavedChanges(false);
+        }
 
         // Refresh builds list
         queryClient.invalidateQueries({
@@ -328,11 +426,11 @@ export const useBuildOperations = ({
         // Don't show popup for new build creation - it will be auto-saved
       } catch (error: any) {
         console.error("Failed to create new build:", error);
-        alert(
-          `Failed to create new build: ${
-            error.response?.data?.message || error.message
-          }`
-        );
+        setModalMessage({
+          title: "Create Failed",
+          message: `Failed to create new build: ${error.response?.data?.message || error.message}`
+        });
+        setShowError(true);
       }
     },
     [
@@ -342,6 +440,7 @@ export const useBuildOperations = ({
       setBuildName,
       setSelectedBuildId,
       setIsModifyingExisting,
+      setPriceRange,
       queryClient,
     ]
   );
@@ -349,12 +448,20 @@ export const useBuildOperations = ({
   // Add build to shopping cart (DRAFT status cart)
   const handleAddToCart = useCallback(async () => {
     if (!selectedUserId) {
-      alert("Please select a user first.");
+      setModalMessage({
+        title: "User Required",
+        message: "Please select a user first."
+      });
+      setShowError(true);
       return;
     }
 
     if (Object.keys(currentBuild).length === 0) {
-      alert("Build is empty. Add some components first.");
+      setModalMessage({
+        title: "Empty Build",
+        message: "Build is empty. Add some components first."
+      });
+      setShowError(true);
       return;
     }
 
@@ -413,10 +520,18 @@ export const useBuildOperations = ({
         queryKey: [`/api/v1/items/cart/${shoppingCart.id}`],
       });
 
-      alert(`${componentCount} build components added to shopping cart!`);
+      setModalMessage({
+        title: "Added to Cart",
+        message: `${componentCount} build components added to shopping cart!`
+      });
+      setShowSaveSuccess(true);
     } catch (error: any) {
       console.error("Failed to add build to cart:", error);
-      alert("Failed to add build to cart. Please try again.");
+      setModalMessage({
+        title: "Add to Cart Failed",
+        message: "Failed to add build to cart. Please try again."
+      });
+      setShowError(true);
     }
   }, [
     currentBuild,
@@ -427,11 +542,28 @@ export const useBuildOperations = ({
   ]);
 
   return {
+    // Functions
     handleSaveBuild,
     handleLoadBuild,
     handleDeleteBuild,
+    handleDeleteConfirmed,
     handleClearBuild,
+    handleClearConfirmed,
     handleBuildNameConfirm,
     handleAddToCart,
+    
+    // Modal states
+    showDeleteConfirm,
+    setShowDeleteConfirm,
+    showClearConfirm,
+    setShowClearConfirm,
+    showSaveSuccess,
+    setShowSaveSuccess,
+    showError,
+    setShowError,
+    deleteTarget,
+    modalMessage,
+    clearConfirmMessage,
+    setClearConfirmMessage,
   };
 };

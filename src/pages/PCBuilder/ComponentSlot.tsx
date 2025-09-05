@@ -27,6 +27,7 @@ interface ComponentSlotProps {
   onRemove: (componentId?: number) => void;
   suggestions: ComponentResponse[];
   issues: CompatibilityIssue[];
+  highlight?: boolean; // For highlighting recommended components
 }
 
 const ComponentSlot: React.FC<ComponentSlotProps> = ({
@@ -36,6 +37,7 @@ const ComponentSlot: React.FC<ComponentSlotProps> = ({
   onRemove,
   suggestions,
   issues,
+  highlight = false,
 }) => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [wasFilledPreviously, setWasFilledPreviously] = useState(false);
@@ -141,7 +143,7 @@ const ComponentSlot: React.FC<ComponentSlotProps> = ({
             </div>
           </div>
           <button
-            onClick={onRemove}
+            onClick={() => onRemove()}
             className="p-1.5 bg-red-100 text-red-600 rounded-lg text-xs hover:bg-red-200 transition-colors"
           >
             <X size={14} />
@@ -247,6 +249,8 @@ const ComponentSlot: React.FC<ComponentSlotProps> = ({
           ? "border-red-300 bg-red-50"
           : hasWarning
           ? "border-yellow-300 bg-yellow-50"
+          : highlight
+          ? "border-blue-400 bg-blue-50 shadow-lg ring-2 ring-blue-200"
           : "border-gray-300 bg-white"
       }`}
     >
@@ -254,6 +258,11 @@ const ComponentSlot: React.FC<ComponentSlotProps> = ({
       <div className="flex items-center gap-3 mb-4">
         <IconComponent size={24} className={iconConfig.colorClass} />
         <h3 className="font-semibold text-gray-900">{title}</h3>
+        {highlight && (
+          <span className="px-2 py-1 text-xs font-medium bg-blue-600 text-white rounded-full">
+            👆 Start Here
+          </span>
+        )}
       </div>
 
       {renderComponent()}

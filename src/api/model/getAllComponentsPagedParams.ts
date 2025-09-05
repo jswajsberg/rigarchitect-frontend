@@ -8,6 +8,30 @@
 
 export type GetAllComponentsPagedParams = {
 /**
+ * Search term (name, brand, etc.)
+ */
+searchTerm?: string;
+/**
+ * Brand filter
+ */
+brand?: string;
+/**
+ * Compatibility tag filter
+ */
+compatibilityTag?: string;
+/**
+ * Maximum price filter
+ */
+maxPrice?: number;
+/**
+ * Minimum stock filter
+ */
+minStock?: number;
+/**
+ * In stock only filter
+ */
+inStockOnly?: boolean;
+/**
  * Page number (0-based)
  */
 page?: number;

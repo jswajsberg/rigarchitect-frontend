@@ -4,9 +4,11 @@ import React, { useState, useEffect } from "react";
 interface BuildNameModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (buildName: string) => void;
+  onConfirm: (buildName: string, priceRange?: { min: number; max: number }) => void;
   initialName?: string;
   title?: string;
+  userBudget?: number;
+  includePriceRange?: boolean;
 }
 
 const BuildNameModal: React.FC<BuildNameModalProps> = ({
@@ -15,15 +17,25 @@ const BuildNameModal: React.FC<BuildNameModalProps> = ({
   onConfirm,
   initialName = "",
   title = "Name Your Build",
+  userBudget = 5000,
+  includePriceRange = false,
 }) => {
   const [buildName, setBuildName] = useState(initialName);
   const [error, setError] = useState<string>("");
+  const [priceRange, setPriceRange] = useState({
+    min: 0,
+    max: userBudget,
+  });
 
   // Update local state when initialName changes or modal opens
   useEffect(() => {
     setBuildName(initialName);
     setError("");
-  }, [initialName, isOpen]);
+    setPriceRange({
+      min: 0,
+      max: userBudget,
+    });
+  }, [initialName, isOpen, userBudget]);
 
   // Focus input when modal opens
   useEffect(() => {
@@ -69,14 +81,34 @@ const BuildNameModal: React.FC<BuildNameModalProps> = ({
       return;
     }
 
-    onConfirm(trimmedName);
+    onConfirm(trimmedName, includePriceRange ? priceRange : undefined);
     handleClose();
   };
 
   const handleClose = () => {
     setBuildName(initialName);
     setError("");
+    setPriceRange({
+      min: 0,
+      max: userBudget,
+    });
     onClose();
+  };
+
+  const handlePriceRangeChange = (type: 'min' | 'max', value: number) => {
+    setPriceRange(prev => {
+      if (type === 'min') {
+        return {
+          ...prev,
+          min: Math.min(value, prev.max - 50), // Ensure min is at least 50 less than max
+        };
+      } else {
+        return {
+          ...prev,
+          max: Math.max(value, prev.min + 50), // Ensure max is at least 50 more than min
+        };
+      }
+    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -128,6 +160,105 @@ const BuildNameModal: React.FC<BuildNameModalProps> = ({
               {buildName.length}/50 characters
             </p>
           </div>
+
+          {/* Price Range Section */}
+          {includePriceRange && (
+            <div className="mb-4">
+              <h4 className="text-sm font-medium text-gray-700 mb-3">Budget Range</h4>
+              <div className="space-y-3">
+                {/* Min Price */}
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">
+                    Minimum Budget
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-500">$</span>
+                    <input
+                      type="range"
+                      min="0"
+                      max={userBudget}
+                      step="50"
+                      value={priceRange.min}
+                      onChange={(e) => handlePriceRangeChange('min', parseInt(e.target.value))}
+                      className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                    <span className="text-sm font-medium text-gray-700 min-w-16">
+                      ${priceRange.min}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Max Price */}
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">
+                    Maximum Budget
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-500">$</span>
+                    <input
+                      type="range"
+                      min="50"
+                      max={userBudget}
+                      step="50"
+                      value={priceRange.max}
+                      onChange={(e) => handlePriceRangeChange('max', parseInt(e.target.value))}
+                      className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                    <span className="text-sm font-medium text-gray-700 min-w-16">
+                      ${priceRange.max}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Range visualization */}
+                <div className="relative h-2 bg-gray-200 rounded">
+                  <div
+                    className="absolute h-2 bg-gradient-to-r from-blue-400 to-green-400 rounded"
+                    style={{
+                      left: `${(priceRange.min / userBudget) * 100}%`,
+                      width: `${((priceRange.max - priceRange.min) / userBudget) * 100}%`,
+                    }}
+                  />
+                </div>
+                
+                <div className="flex justify-between text-xs text-gray-500">
+                  <span>$0</span>
+                  <span>${userBudget}</span>
+                </div>
+
+                {/* Quick preset buttons */}
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPriceRange({ min: 0, max: Math.floor(userBudget * 0.4) })}
+                    className="px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition-colors"
+                  >
+                    Budget Build
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPriceRange({ 
+                      min: Math.floor(userBudget * 0.2), 
+                      max: Math.floor(userBudget * 0.7) 
+                    })}
+                    className="px-2 py-1 text-xs bg-purple-50 text-purple-700 rounded hover:bg-purple-100 transition-colors"
+                  >
+                    Mid-Range
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPriceRange({ 
+                      min: Math.floor(userBudget * 0.5), 
+                      max: userBudget 
+                    })}
+                    className="px-2 py-1 text-xs bg-green-50 text-green-700 rounded hover:bg-green-100 transition-colors"
+                  >
+                    High-End
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Action buttons */}
           <div className="flex gap-3 justify-end">

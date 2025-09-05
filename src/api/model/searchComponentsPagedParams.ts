@@ -9,6 +9,10 @@ import type { SearchComponentsPagedType } from './searchComponentsPagedType';
 
 export type SearchComponentsPagedParams = {
 /**
+ * Search term (name, brand, etc.)
+ */
+searchTerm?: string;
+/**
  * Type filter
  */
 type?: SearchComponentsPagedType;
@@ -21,6 +25,10 @@ brand?: string;
  */
 socket?: string;
 /**
+ * Compatibility tag filter
+ */
+compatibilityTag?: string;
+/**
  * Maximum price filter
  */
 maxPrice?: number;
@@ -28,6 +36,10 @@ maxPrice?: number;
  * Minimum stock filter
  */
 minStock?: number;
+/**
+ * In stock only filter
+ */
+inStockOnly?: boolean;
 /**
  * Page number (0-based)
  */

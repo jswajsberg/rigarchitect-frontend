@@ -53,7 +53,7 @@ const ComponentCatalog: React.FC = () => {
 
   // Local state for search and filtering
   const [searchTerm, setSearchTerm] = useState("");
-  const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
   const [selectedType, setSelectedType] = useState<string | null>(null);
 
   // Mutations for creating/deleting cart items
@@ -192,6 +192,12 @@ const ComponentCatalog: React.FC = () => {
 
   // Pagination parameters
   const paginationParams: GetAllComponentsPagedParams = {
+    searchTerm: searchTerm.trim() || undefined,
+    brand: filters.brand.trim() || undefined,
+    compatibilityTag: filters.compatibilityTag.trim() || undefined,
+    maxPrice: filters.maxPrice ? parseFloat(filters.maxPrice) : undefined,
+    minStock: filters.minStock ? parseInt(filters.minStock) : undefined,
+    inStockOnly: inStockOnly,
     page: currentPage,
     size: pageSize,
     sortBy: "name",
@@ -199,6 +205,12 @@ const ComponentCatalog: React.FC = () => {
   };
 
   const typePaginationParams: GetComponentsByTypePagedParams = {
+    searchTerm: searchTerm.trim() || undefined,
+    brand: filters.brand.trim() || undefined,
+    compatibilityTag: filters.compatibilityTag.trim() || undefined,
+    maxPrice: filters.maxPrice ? parseFloat(filters.maxPrice) : undefined,
+    minStock: filters.minStock ? parseInt(filters.minStock) : undefined,
+    inStockOnly: inStockOnly,
     page: currentPage,
     size: pageSize,
     sortBy: "name",
@@ -226,12 +238,12 @@ const ComponentCatalog: React.FC = () => {
   });
 
   // Fetch components of selected type (non-paginated)
-  const {
-    data: typeComponents,
-    error: typeError,
-  } = useGetComponentsByType(selectedType as any, {
-    query: { enabled: !usePagination && !!selectedType },
-  });
+  const { data: typeComponents, error: typeError } = useGetComponentsByType(
+    selectedType as any,
+    {
+      query: { enabled: !usePagination && !!selectedType },
+    }
+  );
 
   // Fetch components of selected type (paginated)
   const {
@@ -291,18 +303,14 @@ const ComponentCatalog: React.FC = () => {
 
     // Determine which components to use
     if (usePagination) {
-      // Use paginated data (filtering is limited since it's already paginated)
+      // Use paginated data
       if (selectedType && typeComponentsPaged?.data?.content) {
         components = typeComponentsPaged.data.content;
       } else if (allComponentsPaged?.data?.content) {
         components = allComponentsPaged.data.content;
       }
-      
-      // For paginated data, we can only apply client-side filters that don't conflict with server pagination
-      // In this case, we'll just return the paginated data as-is to keep it simple
-      return components;
     } else {
-      // Use non-paginated data with full client-side filtering
+      // Use non-paginated data
       if (selectedType && typeComponents?.data) {
         components = typeComponents.data;
       } else if (allComponents?.data) {
@@ -314,7 +322,7 @@ const ComponentCatalog: React.FC = () => {
     if (searchTerm.trim()) {
       const strategy = determineSearchStrategy(
         searchTerm,
-        showAdvancedSearch,
+        showFilters,
         filters,
         componentTypes
       );
@@ -373,7 +381,7 @@ const ComponentCatalog: React.FC = () => {
     searchTerm,
     filters,
     inStockOnly,
-    showAdvancedSearch,
+    showFilters,
     componentTypes,
     usePagination,
     allComponentsPaged,
@@ -381,17 +389,12 @@ const ComponentCatalog: React.FC = () => {
   ]);
 
   const searchStrategy = searchTerm.trim()
-    ? determineSearchStrategy(
-        searchTerm,
-        showAdvancedSearch,
-        filters,
-        componentTypes
-      )
+    ? determineSearchStrategy(searchTerm, showFilters, filters, componentTypes)
     : null;
 
-  // Loading states  
+  // Loading states
   const isSearchLoading = isLoading;
-  const searchError = error;
+  const searchErrorState = error;
 
   // Reset page when filters change
   const resetPagination = () => {
@@ -401,7 +404,7 @@ const ComponentCatalog: React.FC = () => {
   // Handle pagination controls
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleTogglePagination = () => {
@@ -763,7 +766,6 @@ const ComponentCatalog: React.FC = () => {
       minStock: "0",
     });
     setInStockOnly(false);
-    setShowAdvancedSearch(false);
   };
 
   // Clear only advanced search filters without closing the section
@@ -784,8 +786,8 @@ const ComponentCatalog: React.FC = () => {
     resetPagination();
   };
 
-  const handleToggleAdvancedSearch = () => {
-    setShowAdvancedSearch(!showAdvancedSearch);
+  const handleToggleFilters = () => {
+    setShowFilters(!showFilters);
   };
 
   const handleFilterChange = (key: string, value: string) => {
@@ -815,8 +817,8 @@ const ComponentCatalog: React.FC = () => {
         <SearchBar
           searchTerm={searchTerm}
           onSearchTermChange={handleSearchTermChange}
-          showAdvancedSearch={showAdvancedSearch}
-          onToggleAdvancedSearch={handleToggleAdvancedSearch}
+          showFilters={showFilters}
+          onToggleFilters={handleToggleFilters}
           filters={filters}
           onFilterChange={handleFilterChange}
           inStockOnly={inStockOnly}
@@ -863,7 +865,7 @@ const ComponentCatalog: React.FC = () => {
               </button>
             );
           })}
-          
+
           {/* Pagination Toggle */}
           <div className="ml-auto flex items-center gap-2 text-sm">
             <span className="text-gray-600">Pagination:</span>
@@ -891,7 +893,7 @@ const ComponentCatalog: React.FC = () => {
         )}
 
         {/* Error State */}
-        {searchError && (
+        {searchErrorState && (
           <div className="text-center py-8">
             <div className="text-red-600 mb-2">Failed to load components</div>
             <button
@@ -904,87 +906,107 @@ const ComponentCatalog: React.FC = () => {
         )}
 
         {/* Results Grid */}
-        {!isSearchLoading && !searchError && displayedComponents.length > 0 && (
-          <>
-            {/* Results count and pagination info */}
-            {usePagination && paginationInfo && (
-              <div className="mb-4 text-sm text-gray-600">
-                Showing {((paginationInfo.currentPage || 0) * pageSize) + 1} - {Math.min(((paginationInfo.currentPage || 0) + 1) * pageSize, paginationInfo.totalElements)} of {paginationInfo.totalElements} components
-              </div>
-            )}
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {displayedComponents.map((component) => (
-                <ComponentCard
-                  key={component.id}
-                  component={component}
-                  onAddToBuildCart={handleAddToBuildCart}
-                  onAddToCheckoutCart={handleAddToCheckoutCart}
-                  showCartButtons={true}
-                />
-              ))}
-            </div>
-            
-            {/* Pagination Controls */}
-            {usePagination && paginationInfo && paginationInfo.totalPages > 1 && (
-              <div className="mt-8 flex justify-center items-center gap-2">
-                <button
-                  onClick={() => handlePageChange(paginationInfo.currentPage - 1)}
-                  disabled={!paginationInfo.hasPrevious}
-                  className="px-3 py-2 text-sm border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                >
-                  Previous
-                </button>
-                
-                <div className="flex gap-1">
-                  {Array.from({ length: Math.min(5, paginationInfo.totalPages) }, (_, i) => {
-                    let pageNum;
-                    if (paginationInfo.totalPages <= 5) {
-                      pageNum = i;
-                    } else if (paginationInfo.currentPage <= 2) {
-                      pageNum = i;
-                    } else if (paginationInfo.currentPage >= paginationInfo.totalPages - 3) {
-                      pageNum = paginationInfo.totalPages - 5 + i;
-                    } else {
-                      pageNum = paginationInfo.currentPage - 2 + i;
-                    }
-                    
-                    return (
-                      <button
-                        key={pageNum}
-                        onClick={() => handlePageChange(pageNum)}
-                        className={`px-3 py-2 text-sm border rounded-md ${
-                          pageNum === paginationInfo.currentPage
-                            ? "bg-blue-600 text-white border-blue-600"
-                            : "hover:bg-gray-50"
-                        }`}
-                      >
-                        {pageNum + 1}
-                      </button>
-                    );
-                  })}
+        {!isSearchLoading &&
+          !searchErrorState &&
+          displayedComponents.length > 0 && (
+            <>
+              {/* Results count and pagination info */}
+              {usePagination && paginationInfo && (
+                <div className="mb-4 text-sm text-gray-600">
+                  Showing {(paginationInfo.currentPage || 0) * pageSize + 1} -{" "}
+                  {Math.min(
+                    ((paginationInfo.currentPage || 0) + 1) * pageSize,
+                    paginationInfo.totalElements
+                  )}{" "}
+                  of {paginationInfo.totalElements} components
                 </div>
-                
-                <button
-                  onClick={() => handlePageChange(paginationInfo.currentPage + 1)}
-                  disabled={!paginationInfo.hasNext}
-                  className="px-3 py-2 text-sm border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                >
-                  Next
-                </button>
-                
-                <div className="ml-4 text-sm text-gray-600">
-                  Page {paginationInfo.currentPage + 1} of {paginationInfo.totalPages}
-                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {displayedComponents.map((component) => (
+                  <ComponentCard
+                    key={component.id}
+                    component={component}
+                    onAddToBuildCart={handleAddToBuildCart}
+                    onAddToCheckoutCart={handleAddToCheckoutCart}
+                    showCartButtons={true}
+                  />
+                ))}
               </div>
-            )}
-          </>
-        )}
+
+              {/* Pagination Controls */}
+              {usePagination &&
+                paginationInfo &&
+                paginationInfo.totalPages > 1 && (
+                  <div className="mt-8 flex justify-center items-center gap-2">
+                    <button
+                      onClick={() =>
+                        handlePageChange(paginationInfo.currentPage - 1)
+                      }
+                      disabled={!paginationInfo.hasPrevious}
+                      className="px-3 py-2 text-sm border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                    >
+                      Previous
+                    </button>
+
+                    <div className="flex gap-1">
+                      {Array.from(
+                        { length: Math.min(5, paginationInfo.totalPages) },
+                        (_, i) => {
+                          let pageNum;
+                          if (paginationInfo.totalPages <= 5) {
+                            pageNum = i;
+                          } else if (paginationInfo.currentPage <= 2) {
+                            pageNum = i;
+                          } else if (
+                            paginationInfo.currentPage >=
+                            paginationInfo.totalPages - 3
+                          ) {
+                            pageNum = paginationInfo.totalPages - 5 + i;
+                          } else {
+                            pageNum = paginationInfo.currentPage - 2 + i;
+                          }
+
+                          return (
+                            <button
+                              key={pageNum}
+                              onClick={() => handlePageChange(pageNum)}
+                              className={`px-3 py-2 text-sm border rounded-md ${
+                                pageNum === paginationInfo.currentPage
+                                  ? "bg-blue-600 text-white border-blue-600"
+                                  : "hover:bg-gray-50"
+                              }`}
+                            >
+                              {pageNum + 1}
+                            </button>
+                          );
+                        }
+                      )}
+                    </div>
+
+                    <button
+                      onClick={() =>
+                        handlePageChange(paginationInfo.currentPage + 1)
+                      }
+                      disabled={!paginationInfo.hasNext}
+                      className="px-3 py-2 text-sm border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                    >
+                      Next
+                    </button>
+
+                    <div className="ml-4 text-sm text-gray-600">
+                      Page {paginationInfo.currentPage + 1} of{" "}
+                      {paginationInfo.totalPages}
+                    </div>
+                  </div>
+                )}
+            </>
+          )}
 
         {/* No results state */}
         {!isSearchLoading &&
-          !searchError &&
-          (searchTerm || showAdvancedSearch || selectedType || inStockOnly) &&
+          !searchErrorState &&
+          (searchTerm || showFilters || selectedType || inStockOnly) &&
           displayedComponents.length === 0 && (
             <div className="text-center py-8">
               <div className="text-gray-600 mb-2">No components found</div>
@@ -1008,14 +1030,15 @@ const ComponentCatalog: React.FC = () => {
 
         {/* Default state - no search/browse active */}
         {!searchTerm &&
-          !showAdvancedSearch &&
+          !showFilters &&
           !selectedType &&
           !inStockOnly &&
           !isLoading &&
           !error && (
             <div className="text-center py-8">
               <div className="text-gray-600">
-                Use the search bar above or browse by component type to get started
+                Use the search bar above or browse by component type to get
+                started
               </div>
             </div>
           )}

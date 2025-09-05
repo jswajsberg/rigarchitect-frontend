@@ -1,6 +1,7 @@
 // src/pages/PCBuilder/index.tsx
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { useSelectedUserId } from "../../contexts/UserContext";
+import { useNavigation } from "../../contexts/NavigationContext";
 import { useGetAllComponents } from "../../api/component-controller/component-controller";
 import { useCreateItem } from "../../api/cart-item-controller/cart-item-controller";
 import {
@@ -22,6 +23,7 @@ import {
 } from "../../utils/buildTemplates";
 import { useBuilder } from "../../contexts/BuilderContext";
 import BuildNameModal from "../../modals/BuildNameModal";
+import ConfirmModal from "../../modals/ConfirmModal";
 import ComponentSlot from "./ComponentSlot";
 import { useBuildOperations } from "./hooks/useBuildOperations";
 import {
@@ -38,12 +40,14 @@ import {
   CheckCircle,
   AlertTriangle,
   Info,
+  Lightbulb,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
 
 const PCBuilder: React.FC = () => {
   const selectedUserId = useSelectedUserId();
+  const { activeTab } = useNavigation();
   const { data: allComponents } = useGetAllComponents();
   const createItemMutation = useCreateItem();
   const createCartMutation = useCreateCartForUser();
@@ -75,8 +79,17 @@ const PCBuilder: React.FC = () => {
   const [isApplyingTemplate, setIsApplyingTemplate] = useState(false);
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const autoSaveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const templateTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const currentTemplateRef = React.useRef<string>("");
+  const templateGenerationRef = React.useRef<number>(0);
+  const lastOperationRef = React.useRef<{ type: 'save' | 'load', timestamp: number } | null>(null);
+
+  // === Component data snapshot for consistent template application ===
+  const componentSnapshotRef = React.useRef<ComponentResponse[] | null>(null);
+  const [componentSnapshotTimestamp, setComponentSnapshotTimestamp] = useState<number | null>(null);
 
   // Get saved builds (ACTIVE status)
   const { data: userCarts } = useGetUserCarts(selectedUserId || 0, {
@@ -94,17 +107,72 @@ const PCBuilder: React.FC = () => {
 
   const components = allComponents?.data || [];
 
+  // Create or maintain component snapshot for consistent template application
+  const getComponentSnapshot = useCallback(() => {
+    // If we have fresh component data and no existing snapshot, create one
+    if (components.length > 0 && !componentSnapshotRef.current) {
+      console.log("Creating component data snapshot for consistent template application");
+      componentSnapshotRef.current = [...components]; // Deep copy of components
+      setComponentSnapshotTimestamp(Date.now());
+      return componentSnapshotRef.current;
+    }
+    
+    // If snapshot exists and is recent (< 5 minutes), use it
+    if (componentSnapshotRef.current && componentSnapshotTimestamp) {
+      const snapshotAge = Date.now() - componentSnapshotTimestamp;
+      if (snapshotAge < 5 * 60 * 1000) { // 5 minutes
+        return componentSnapshotRef.current;
+      }
+    }
+    
+    // Refresh snapshot if it's too old or components have significantly changed
+    if (components.length > 0) {
+      console.log("Refreshing component data snapshot");
+      componentSnapshotRef.current = [...components];
+      setComponentSnapshotTimestamp(Date.now());
+      return componentSnapshotRef.current;
+    }
+    
+    // Fallback to current components if no snapshot possible
+    return components;
+  }, [components, componentSnapshotTimestamp]);
+
+  // Clear component snapshot when explicitly requested (e.g., when user manually refreshes)
+  const clearComponentSnapshot = useCallback(() => {
+    console.log("Clearing component data snapshot");
+    componentSnapshotRef.current = null;
+    setComponentSnapshotTimestamp(null);
+  }, []);
+
   // Use the extracted build operations hook
   const {
     handleSaveBuild,
     handleLoadBuild,
     handleDeleteBuild,
+    handleDeleteConfirmed,
     handleClearBuild: originalHandleClearBuild,
+    handleClearConfirmed,
     handleBuildNameConfirm,
     handleAddToCart,
+    
+    // Modal states
+    showDeleteConfirm,
+    setShowDeleteConfirm,
+    showClearConfirm,
+    setShowClearConfirm,
+    showSaveSuccess,
+    setShowSaveSuccess,
+    showError,
+    setShowError,
+    deleteTarget,
+    modalMessage,
+    clearConfirmMessage,
+    setClearConfirmMessage,
   } = useBuildOperations({
     selectedBuildItems,
     createItemMutation,
+    setHasUnsavedChanges,
+    lastOperationRef,
   });
 
   // Auto-save functionality
@@ -144,25 +212,20 @@ const PCBuilder: React.FC = () => {
 
     try {
       // Use the build name (should already be set by now)
-      const buildNameToUse = buildName.trim();
+      // const buildNameToUse = buildName.trim(); // Removed unused variable
 
-      // If no existing build, create one
+      // Skip auto-save if no build is selected (build creation should happen through handleBuildNameConfirm)
       if (!selectedBuildId || !isModifyingExisting) {
-        console.log("Creating new build...");
-        // Create new build
-        const newBuildResponse = await createCartMutation.mutateAsync({
-          userId: selectedUserId,
-          data: { name: buildNameToUse, status: "ACTIVE" },
-        });
-        console.log("New build created:", newBuildResponse.data);
-        setSelectedBuildId(newBuildResponse.data.id!);
-        setIsModifyingExisting(true);
+        console.log("Auto-save skipped: no existing build to save to");
+        return;
       }
 
       // Save the build silently (this will handle updating existing builds)
       console.log("Saving build...");
       await handleSaveBuild(true); // Pass true for silent save
       setLastSaved(new Date());
+      lastOperationRef.current = { type: 'save', timestamp: Date.now() };
+      // Note: setHasUnsavedChanges(false) is now handled in useBuildOperations hook
       console.log("Auto-save completed successfully");
     } catch (error) {
       console.error("Auto-save failed:", error);
@@ -183,72 +246,128 @@ const PCBuilder: React.FC = () => {
     setIsModifyingExisting,
   ]);
 
-  // Debounced auto-save
-  const debouncedAutoSave = useCallback(() => {
-    console.log("Debounced auto-save triggered");
-    if (autoSaveTimeoutRef.current) {
-      clearTimeout(autoSaveTimeoutRef.current);
-    }
+  // Debounced auto-save - commented out to remove unused variable warning
+  // const debouncedAutoSave = useCallback(() => {
+  //   console.log("Debounced auto-save triggered");
+  //   if (autoSaveTimeoutRef.current) {
+  //     clearTimeout(autoSaveTimeoutRef.current);
+  //   }
 
-    autoSaveTimeoutRef.current = setTimeout(() => {
-      console.log("Auto-save timeout reached, executing auto-save");
-      autoSave();
-    }, 3000); // Auto-save after 3 seconds of inactivity
-  }, [autoSave]);
+  //   autoSaveTimeoutRef.current = setTimeout(() => {
+  //     console.log("Auto-save timeout reached, executing auto-save");
+  //     autoSave();
+  //   }, 3000); // Auto-save after 3 seconds of inactivity
+  // }, [autoSave]);
 
-  // Cleanup timeout on unmount
+  // Auto-save on page unload (prevents data loss)
   useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges && selectedBuildId && isModifyingExisting) {
+        // Try to save before leaving
+        autoSave();
+        
+        // Show browser warning for unsaved changes
+        const message = "You have unsaved changes. Are you sure you want to leave?";
+        event.returnValue = message;
+        return message;
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      // Auto-save when tab becomes hidden (user switching tabs)
+      if (document.hidden && hasUnsavedChanges && selectedBuildId && isModifyingExisting) {
+        console.log("Tab hidden, auto-saving...");
+        autoSave();
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (autoSaveTimeoutRef.current) {
         clearTimeout(autoSaveTimeoutRef.current);
       }
+      if (templateTimeoutRef.current) {
+        clearTimeout(templateTimeoutRef.current);
+      }
     };
-  }, []);
+  }, [hasUnsavedChanges, selectedBuildId, isModifyingExisting, autoSave]);
 
-  // Auto-save when currentBuild changes (but not during template application or when template is focused)
+  // Auto-save when navigating away from PC Builder
+  const previousTab = React.useRef(activeTab);
   useEffect(() => {
-    // Skip auto-save during template application or when template is focused to prevent loops
-    if (isApplyingTemplate || isUsingTemplate) {
+    const wasOnBuildsTab = previousTab.current === 'builds';
+    const isLeavingBuildsTab = wasOnBuildsTab && activeTab !== 'builds';
+    
+    if (isLeavingBuildsTab && hasUnsavedChanges && selectedBuildId && isModifyingExisting) {
+      console.log('Navigating away from PC Builder, auto-saving...');
+      autoSave();
+    }
+    
+    // Update ref for next render
+    previousTab.current = activeTab;
+  }, [activeTab, hasUnsavedChanges, selectedBuildId, isModifyingExisting, autoSave]);
+
+
+  // Mark build as having unsaved changes when components change
+  useEffect(() => {
+    // Skip during template operations or when no build is selected
+    if (isApplyingTemplate || isUsingTemplate || !selectedBuildId || !isModifyingExisting) {
       return;
     }
 
-    // Only auto-save if we have components and a user selected
+    // Skip if this change is from a recent save/load operation (within last 1 second)
+    if (lastOperationRef.current) {
+      const timeSinceOperation = Date.now() - lastOperationRef.current.timestamp;
+      if (timeSinceOperation < 1000) { // 1 second grace period
+        console.log("Skipping unsaved changes flag - recent operation:", lastOperationRef.current.type);
+        return;
+      }
+    }
+
+    // Mark as unsaved when currentBuild changes
     if (selectedUserId && Object.keys(currentBuild).length > 0) {
-      console.log("CurrentBuild changed, triggering auto-save:", currentBuild);
-      debouncedAutoSave();
+      setHasUnsavedChanges(true);
+      console.log("Build marked as having unsaved changes");
     }
   }, [
     currentBuild,
     selectedUserId,
-    debouncedAutoSave,
+    selectedBuildId,
+    isModifyingExisting,
     isApplyingTemplate,
     isUsingTemplate,
   ]);
 
-  // Auto-save when build name changes (if we have an existing build)
+  // Mark as unsaved when build name changes
   useEffect(() => {
-    // Skip auto-save during template application or when template is focused to prevent loops
-    if (isApplyingTemplate || isUsingTemplate) {
+    // Skip during template operations or when no build is selected
+    if (isApplyingTemplate || isUsingTemplate || !selectedBuildId || !isModifyingExisting) {
       return;
     }
 
-    if (
-      selectedUserId &&
-      buildName.trim() &&
-      isModifyingExisting &&
-      selectedBuildId &&
-      Object.keys(currentBuild).length > 0
-    ) {
-      console.log("Build name changed, triggering auto-save:", buildName);
-      debouncedAutoSave();
+    // Skip if this change is from a recent save/load operation (within last 1 second)
+    if (lastOperationRef.current) {
+      const timeSinceOperation = Date.now() - lastOperationRef.current.timestamp;
+      if (timeSinceOperation < 1000) { // 1 second grace period
+        console.log("Skipping unsaved changes flag for name - recent operation:", lastOperationRef.current.type);
+        return;
+      }
+    }
+
+    // Mark as unsaved when build name changes
+    if (selectedUserId && buildName.trim()) {
+      setHasUnsavedChanges(true);
+      console.log("Build name changed, marked as unsaved");
     }
   }, [
     buildName,
     selectedUserId,
     isModifyingExisting,
     selectedBuildId,
-    currentBuild,
-    debouncedAutoSave,
     isApplyingTemplate,
     isUsingTemplate,
   ]);
@@ -259,7 +378,8 @@ const PCBuilder: React.FC = () => {
     setUserExplicitlyCleared(true);
     setSelectedTemplateId(""); // Clear template selection when build is cleared
     setIsUsingTemplate(false); // Reset template flag
-  }, [originalHandleClearBuild]);
+    clearComponentSnapshot(); // Clear component snapshot for fresh data
+  }, [originalHandleClearBuild, clearComponentSnapshot]);
 
   // Template scrolling functions
   const checkScrollButtons = useCallback(() => {
@@ -462,8 +582,13 @@ const PCBuilder: React.FC = () => {
         setIsUsingTemplate(false);
         setSelectedTemplateId("");
       }
+      
+      // Mark as having unsaved changes when manually selecting components
+      if (selectedBuildId && isModifyingExisting) {
+        setHasUnsavedChanges(true);
+      }
     },
-    [setCurrentBuild, isUsingTemplate]
+    [setCurrentBuild, isUsingTemplate, selectedBuildId, isModifyingExisting, setHasUnsavedChanges]
   );
 
   const handleRemoveComponent = useCallback(
@@ -495,31 +620,46 @@ const PCBuilder: React.FC = () => {
         setIsUsingTemplate(false);
         setSelectedTemplateId("");
       }
+      
+      // Mark as having unsaved changes when manually removing components
+      if (selectedBuildId && isModifyingExisting) {
+        setHasUnsavedChanges(true);
+      }
     },
-    [setCurrentBuild, isUsingTemplate]
+    [setCurrentBuild, isUsingTemplate, selectedBuildId, isModifyingExisting, setHasUnsavedChanges]
   );
 
-  // Apply template with atomic replacement - no setTimeout to prevent race conditions
-  const handleApplyTemplate = useCallback(
-    (templateId: string) => {
+  // Generation-based template application with complete race condition protection
+  const applyTemplateInternal = useCallback(
+    (templateId: string, generation: number) => {
       const template = getBuildTemplate(templateId);
-      if (!template || isApplyingTemplate) return;
+      if (!template) {
+        console.warn(`Template ${templateId} not found`);
+        setIsApplyingTemplate(false);
+        return;
+      }
 
-      // Prevent multiple simultaneous template applications
-      setIsApplyingTemplate(true);
+      // Check if this generation is still current (race condition protection)
+      if (templateGenerationRef.current !== generation) {
+        console.log(`Template operation generation ${generation} superseded by ${templateGenerationRef.current}, aborting`);
+        return;
+      }
 
-      // Clear ALL state completely and immediately
-      setCurrentBuild({});
-      setSelectedBuildId(null);
-      setIsModifyingExisting(false);
-      setUserExplicitlyCleared(false);
-      setIsUsingTemplate(true);
-      setSelectedTemplateId(templateId);
-      setMissingComponentsInfo([]);
+      console.log(`Applying template: ${template.name} (generation ${generation})`);
 
-      // Apply the new template immediately - no setTimeout to prevent race conditions
+      // Use consistent component snapshot for template application
+      const consistentComponents = getComponentSnapshot();
+      console.log(`Using component snapshot with ${consistentComponents.length} components for template application`);
+
+      // Apply the new template (this is synchronous)
       const { suggestedBuild, missingComponents, budgetWarnings } =
-        applyBuildTemplate(template, components);
+        applyBuildTemplate(template, consistentComponents);
+
+      // Final generation check before setting any state
+      if (templateGenerationRef.current !== generation) {
+        console.log(`Template operation generation ${generation} superseded during processing, aborting`);
+        return;
+      }
 
       // Create completely new build object with proper array handling
       const cleanBuild: BuildSlots = {
@@ -534,11 +674,25 @@ const PCBuilder: React.FC = () => {
         Cooler: suggestedBuild.Cooler || undefined,
       };
 
-      // Set all state atomically
-      setCurrentBuild(cleanBuild);
-      setPriceRange(template.targetPrice);
-      setBuildName(String(template.name || "Template Build").trim());
-      setMissingComponentsInfo(missingComponents);
+      // Set all state atomically - this is now guaranteed to be from the correct generation
+      React.startTransition(() => {
+        // Triple-check generation one more time inside the transition
+        if (templateGenerationRef.current === generation) {
+          setCurrentBuild(cleanBuild);
+          setPriceRange(template.targetPrice);
+          setBuildName(String(template.name || "Template Build").trim());
+          setMissingComponentsInfo(missingComponents);
+          setIsUsingTemplate(true);
+          setSelectedTemplateId(templateId);
+          setSelectedBuildId(null);
+          setIsModifyingExisting(false);
+          setUserExplicitlyCleared(false);
+          
+          console.log(`Template ${template.name} applied successfully (generation ${generation})`);
+        } else {
+          console.log(`Template operation generation ${generation} superseded in final state update`);
+        }
+      });
 
       // Reset loading state
       setIsApplyingTemplate(false);
@@ -563,30 +717,93 @@ const PCBuilder: React.FC = () => {
       }
     },
     [
-      components,
+      getComponentSnapshot,
       setCurrentBuild,
       setPriceRange,
       setBuildName,
       setIsModifyingExisting,
       setSelectedBuildId,
-      isApplyingTemplate,
     ]
+  );
+
+  // Generation-based template application - completely race condition free
+  const handleApplyTemplate = useCallback(
+    (templateId: string) => {
+      // Cancel any pending template application
+      if (templateTimeoutRef.current) {
+        clearTimeout(templateTimeoutRef.current);
+        templateTimeoutRef.current = null;
+        console.log(`Cancelled pending template application`);
+      }
+
+      // Increment generation - this invalidates all previous operations
+      templateGenerationRef.current += 1;
+      const currentGeneration = templateGenerationRef.current;
+      
+      // Update template tracking
+      currentTemplateRef.current = templateId;
+      
+      console.log(`Starting template application: ${templateId} (generation ${currentGeneration})`);
+
+      // If not currently applying, start immediately
+      if (!isApplyingTemplate) {
+        setIsApplyingTemplate(true);
+        applyTemplateInternal(templateId, currentGeneration);
+      } else {
+        // If already applying, debounce but with generation tracking
+        console.log(`Template application in progress, debouncing ${templateId} (generation ${currentGeneration})`);
+        templateTimeoutRef.current = setTimeout(() => {
+          // Only proceed if this generation is still current
+          if (templateGenerationRef.current === currentGeneration) {
+            console.log(`Applying debounced template: ${templateId} (generation ${currentGeneration})`);
+            applyTemplateInternal(templateId, currentGeneration);
+          } else {
+            console.log(`Debounced template ${templateId} (generation ${currentGeneration}) was superseded`);
+          }
+          templateTimeoutRef.current = null;
+        }, 500); // Increased from 100ms to 500ms to better handle rapid clicks
+      }
+    },
+    [isApplyingTemplate, applyTemplateInternal]
   );
 
   // Create new build - now opens modal instead of clearing immediately
   const handleNewBuild = useCallback(() => {
     if (Object.keys(currentBuild).length > 0) {
-      const confirmClear = window.confirm(
-        "Are you sure you want to start a new build? Any unsaved changes will be lost."
-      );
-      if (!confirmClear) return;
+      // Show clear confirmation modal first, but customize the confirm handler
+      setClearConfirmMessage("Are you sure you want to start a new build? Any unsaved changes will be lost.");
+      setShowClearConfirm(true);
+      return;
     }
 
     // Clear template selection and open the build name modal
     setSelectedTemplateId("");
     setIsUsingTemplate(false); // Reset template flag
     setShowBuildNameModal(true);
-  }, [currentBuild]);
+  }, [currentBuild, setClearConfirmMessage, setShowClearConfirm]);
+
+  // Custom handler for clearing when starting new build
+  const handleNewBuildClearConfirmed = useCallback(() => {
+    // Clear everything like a regular clear
+    setCurrentBuild({});
+    setBuildName("");
+    setSelectedBuildId(null);
+    setIsModifyingExisting(false);
+    setSelectedTemplateId("");
+    setIsUsingTemplate(false);
+    clearComponentSnapshot();
+    
+    // Close modal and open build name modal
+    setShowClearConfirm(false);
+    setShowBuildNameModal(true);
+  }, [
+    setCurrentBuild, 
+    setBuildName, 
+    setSelectedBuildId, 
+    setIsModifyingExisting, 
+    clearComponentSnapshot,
+    setShowClearConfirm
+  ]);
 
   // Enhanced build loading with proper state management
   const handleEnhancedLoadBuild = useCallback(
@@ -636,10 +853,22 @@ const PCBuilder: React.FC = () => {
               </button>
               {Object.keys(currentBuild).length > 0 && (
                 <button
-                  onClick={() => handleSaveBuild()}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
+                  onClick={async () => {
+                    try {
+                      await handleSaveBuild();
+                      lastOperationRef.current = { type: 'save', timestamp: Date.now() };
+                      // Note: setHasUnsavedChanges(false) is now handled in useBuildOperations hook
+                    } catch (error) {
+                      console.error("Save failed:", error);
+                    }
+                  }}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    hasUnsavedChanges 
+                      ? "bg-orange-600 hover:bg-orange-700 text-white" 
+                      : "bg-green-600 hover:bg-green-700 text-white"
+                  }`}
                 >
-                  {isModifyingExisting ? "Update Build" : "Save Build"}
+                  {hasUnsavedChanges ? "● " : ""}{isModifyingExisting ? "Update Build" : "Save Build"}
                 </button>
               )}
             </div>
@@ -772,11 +1001,14 @@ const PCBuilder: React.FC = () => {
                 return (
                   <div
                     key={template.id}
-                    onClick={() =>
-                      !isApplyingTemplate && handleApplyTemplate(template.id)
-                    }
+                    onClick={() => {
+                      // Prevent clicking if template is applying or within cooldown
+                      if (!isApplyingTemplate && !templateTimeoutRef.current) {
+                        handleApplyTemplate(template.id);
+                      }
+                    }}
                     className={`flex-shrink-0 w-72 h-36 p-3 rounded-lg border-2 transition-all duration-200 flex flex-col justify-between ${
-                      isApplyingTemplate
+                      isApplyingTemplate || templateTimeoutRef.current
                         ? "cursor-not-allowed opacity-50"
                         : "cursor-pointer hover:shadow-lg hover:scale-[1.02]"
                     } ${
@@ -784,6 +1016,11 @@ const PCBuilder: React.FC = () => {
                         ? "border-blue-500 bg-blue-50 shadow-md"
                         : "border-gray-200 hover:border-gray-300 bg-white"
                     }`}
+                    title={
+                      isApplyingTemplate || templateTimeoutRef.current
+                        ? "Template is being applied, please wait..."
+                        : `Click to apply ${template.name} template`
+                    }
                   >
                     <div className="flex items-start justify-between min-h-0">
                       <div className="flex items-start gap-3 min-w-0 flex-1">
@@ -1057,10 +1294,76 @@ const PCBuilder: React.FC = () => {
                 <div className="space-y-4">
                   {/* Total Price and Power Info */}
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-green-600">
-                      Total: ${totalPrice.toFixed(2)}
-                    </div>
-                    <div className="text-sm text-gray-600 mt-1">
+                    {(() => {
+                      const isOverBudget = totalPrice > priceRange.max;
+                      const overage = totalPrice - priceRange.max;
+                      const remainingBudget = priceRange.max - totalPrice;
+                      
+                      return (
+                        <div>
+                          <div className={`text-2xl font-bold ${isOverBudget ? 'text-red-600' : 'text-green-600'}`}>
+                            Total: ${totalPrice.toFixed(2)}
+                          </div>
+                          
+                          {/* Budget status */}
+                          <div className="text-sm mt-1">
+                            <div className="flex items-center justify-center gap-2">
+                              <span className="text-gray-600">Budget: ${priceRange.max}</span>
+                              {isOverBudget ? (
+                                <span className="text-red-600 font-medium">
+                                  (${overage.toFixed(2)} over)
+                                </span>
+                              ) : (
+                                <span className="text-green-600 font-medium">
+                                  (${remainingBudget.toFixed(2)} remaining)
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* Over-budget warning */}
+                          {isOverBudget && (
+                            <div className="mt-2 space-y-2">
+                              <div className="p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+                                ⚠️ Build exceeds budget by ${overage.toFixed(2)}
+                              </div>
+                              
+                              {/* Cost reduction suggestions */}
+                              {(() => {
+                                const expensiveComponents = Object.entries(currentBuild)
+                                  .filter(([_, component]) => component)
+                                  .map(([type, component]) => {
+                                    if (Array.isArray(component)) {
+                                      const totalCost = component.reduce((sum, comp) => sum + (Number(comp.price) || 0), 0);
+                                      return { type, cost: totalCost, count: component.length };
+                                    } else {
+                                      return { type, cost: Number(component.price) || 0, count: 1 };
+                                    }
+                                  })
+                                  .sort((a, b) => b.cost - a.cost)
+                                  .slice(0, 3);
+
+                                return expensiveComponents.length > 0 ? (
+                                  <div className="p-2 bg-amber-50 border border-amber-200 rounded text-xs">
+                                    <div className="text-amber-700 font-medium mb-1">💡 Consider reducing costs on:</div>
+                                    <div className="space-y-1">
+                                      {expensiveComponents.map(({ type, cost }) => (
+                                        <div key={type} className="flex justify-between text-amber-600">
+                                          <span>{type}:</span>
+                                          <span>${cost.toFixed(2)}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : null;
+                              })()}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                    
+                    <div className="text-sm text-gray-600 mt-2">
                       Power: {compatibility.powerConsumption.total}W total,{" "}
                       {compatibility.powerConsumption.recommended}W recommended
                       PSU
@@ -1093,6 +1396,30 @@ const PCBuilder: React.FC = () => {
             <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-semibold">Build Summary</h2>
+                {Object.keys(currentBuild).length > 0 && (
+                  <div className="flex items-center gap-4 text-sm">
+                    {/* Save Status */}
+                    {selectedBuildId && isModifyingExisting && (
+                      <div className={`flex items-center gap-2 ${hasUnsavedChanges ? 'text-orange-600' : 'text-gray-600'}`}>
+                        <span className={`w-2 h-2 rounded-full ${hasUnsavedChanges ? 'bg-orange-500' : 'bg-gray-400'}`}></span>
+                        {hasUnsavedChanges ? 'Unsaved Changes' : 'Saved'}
+                      </div>
+                    )}
+                    
+                    {/* Budget Status */}
+                    {totalPrice > priceRange.max ? (
+                      <div className="flex items-center gap-2 text-red-600">
+                        <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+                        Over Budget
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-green-600">
+                        <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                        Within Budget
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Compatibility Status */}
@@ -1143,6 +1470,28 @@ const PCBuilder: React.FC = () => {
                 </div>
               )}
 
+              {/* New Build Guidance */}
+              {Object.keys(currentBuild).length === 0 && !isUsingTemplate && selectedBuildId && (
+                <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <Lightbulb className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-blue-800 mb-2">
+                        🎯 Start Building Your PC!
+                      </h3>
+                      <p className="text-blue-700 text-sm mb-3">
+                        Welcome to your new build! For the best component recommendations, we suggest starting with your <strong>Graphics Card (GPU)</strong> first. 
+                        The GPU is often the most important component for gaming and creative work, and selecting it first helps us suggest compatible components that work well together.
+                      </p>
+                      <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-100 rounded-lg px-3 py-2">
+                        <Video className="w-4 h-4" />
+                        <span className="font-medium">👇 Look for the GPU section below and choose your graphics card to get started!</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Component Slots Grid */}
               <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
                 {/* CPU Slot */}
@@ -1163,6 +1512,7 @@ const PCBuilder: React.FC = () => {
                   onRemove={() => handleRemoveComponent("GPU")}
                   suggestions={suggestions.GPU || []}
                   issues={compatibility.issues}
+                  highlight={Object.keys(currentBuild).length === 0 && !isUsingTemplate && !!selectedBuildId}
                 />
 
                 {/* Motherboard Slot */}
@@ -1253,7 +1603,55 @@ const PCBuilder: React.FC = () => {
         isOpen={showBuildNameModal}
         onClose={() => setShowBuildNameModal(false)}
         onConfirm={handleBuildNameConfirm}
-        title="Name Your New Build"
+        title="Create New Build"
+        userBudget={authUser?.budget || 5000}
+        includePriceRange={true}
+      />
+
+      {/* Delete Build Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={handleDeleteConfirmed}
+        title="Delete Build"
+        message={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+      />
+
+      {/* Clear Build Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showClearConfirm}
+        onClose={() => setShowClearConfirm(false)}
+        onConfirm={clearConfirmMessage.includes("new build") ? handleNewBuildClearConfirmed : handleClearConfirmed}
+        title={clearConfirmMessage.includes("new build") ? "Start New Build" : "Clear Build"}
+        message={clearConfirmMessage}
+        confirmText={clearConfirmMessage.includes("new build") ? "Start New" : "Clear"}
+        cancelText="Cancel"
+        variant="warning"
+      />
+
+      {/* Success Modal */}
+      <ConfirmModal
+        isOpen={showSaveSuccess}
+        onClose={() => setShowSaveSuccess(false)}
+        onConfirm={() => setShowSaveSuccess(false)}
+        title={modalMessage.title}
+        message={modalMessage.message}
+        confirmText="OK"
+        variant="info"
+      />
+
+      {/* Error Modal */}
+      <ConfirmModal
+        isOpen={showError}
+        onClose={() => setShowError(false)}
+        onConfirm={() => setShowError(false)}
+        title={modalMessage.title}
+        message={modalMessage.message}
+        confirmText="OK"
+        variant="danger"
       />
     </>
   );

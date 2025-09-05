@@ -597,15 +597,33 @@ export function getComponentSuggestions(
         return false;
       }
 
-      // Filter by price range - be more lenient
+      // Filter by price range - consider build context
       if (priceRange) {
         const price = Number(component.price) || 0;
-        // Only filter out if price is significantly outside range (more than 2x max)
-        if (price > priceRange.max * 2) {
-          return false;
-        }
-        // Allow components slightly under min range (down to 50% of min)
-        if (price < priceRange.min * 0.5) {
+        
+        // Calculate current build total (excluding the target component type if it exists)
+        const currentBuildTotal = Object.entries(build).reduce((total, [slotType, slotComponent]) => {
+          // Skip the target type we're suggesting for (we'll replace/add to it)
+          if (slotType === targetType) return total;
+          
+          if (Array.isArray(slotComponent)) {
+            return total + slotComponent.reduce((sum, comp) => sum + (Number(comp.price) || 0), 0);
+          } else if (slotComponent) {
+            return total + (Number(slotComponent.price) || 0);
+          }
+          return total;
+        }, 0);
+        
+        // Calculate remaining budget for this component
+        const totalBudget = priceRange.max;
+        const remainingBudget = Math.max(0, totalBudget - currentBuildTotal);
+        
+        // For very tight budgets, be more flexible but still reasonable
+        const minBudgetForComponent = Math.min(priceRange.min * 0.3, remainingBudget * 0.1);
+        const maxBudgetForComponent = Math.max(remainingBudget * 1.2, priceRange.min);
+        
+        // Filter out components that are way outside the practical budget
+        if (price > maxBudgetForComponent || price < minBudgetForComponent) {
           return false;
         }
       }
@@ -711,11 +729,47 @@ export function getComponentSuggestions(
       if (aStock > bStock) scoreA += 2;
       if (bStock > aStock) scoreB += 2;
 
-      // Price scoring (lower price gets slight advantage)
-      const aPrice = Number(a.price) || 0;
-      const bPrice = Number(b.price) || 0;
-      if (aPrice < bPrice) scoreA += 1;
-      if (bPrice < aPrice) scoreB += 1;
+      // Budget-aware price scoring
+      if (priceRange) {
+        const aPrice = Number(a.price) || 0;
+        const bPrice = Number(b.price) || 0;
+        
+        // Calculate current build cost (excluding target component type)
+        const currentBuildTotal = Object.entries(build).reduce((total, [slotType, slotComponent]) => {
+          if (slotType === targetType) return total;
+          
+          if (Array.isArray(slotComponent)) {
+            return total + slotComponent.reduce((sum, comp) => sum + (Number(comp.price) || 0), 0);
+          } else if (slotComponent) {
+            return total + (Number(slotComponent.price) || 0);
+          }
+          return total;
+        }, 0);
+        
+        const totalBudget = priceRange.max;
+        const remainingBudget = Math.max(0, totalBudget - currentBuildTotal);
+        
+        // Score based on how well the price fits the remaining budget
+        // Perfect fit (using 60-80% of remaining budget) gets highest score
+        const idealSpend = remainingBudget * 0.7;
+        
+        const aPriceFit = Math.abs(aPrice - idealSpend) / remainingBudget;
+        const bPriceFit = Math.abs(bPrice - idealSpend) / remainingBudget;
+        
+        // Better price fit gets higher score (lower distance from ideal)
+        if (aPriceFit < bPriceFit) scoreA += 3;
+        if (bPriceFit < aPriceFit) scoreB += 3;
+        
+        // Bonus for components that leave room for other components
+        if (aPrice <= remainingBudget * 0.8) scoreA += 1;
+        if (bPrice <= remainingBudget * 0.8) scoreB += 1;
+      } else {
+        // Fallback to simple price preference when no budget set
+        const aPrice = Number(a.price) || 0;
+        const bPrice = Number(b.price) || 0;
+        if (aPrice < bPrice) scoreA += 1;
+        if (bPrice < aPrice) scoreB += 1;
+      }
 
       return scoreB - scoreA; // Higher score first
     })

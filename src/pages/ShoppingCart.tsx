@@ -16,6 +16,7 @@ import {
 import { useGetAllComponents } from "../api/component-controller/component-controller";
 import type { ComponentResponse, CartItemRequest } from "../api/model";
 import CheckoutModal from "../modals/CheckoutModal";
+import ConfirmModal from "../modals/ConfirmModal";
 import {
   ShoppingCart as ShoppingCartIcon,
   Package,
@@ -47,6 +48,10 @@ const ShoppingCart = () => {
   const [addComponentId, setAddComponentId] = useState("");
   const [addQuantity, setAddQuantity] = useState(1);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [showError, setShowError] = useState(false);
+  const [modalMessage, setModalMessage] = useState({ title: "", message: "" });
 
   // Hooks must be called before any conditional logic
   const {
@@ -121,11 +126,13 @@ const ShoppingCart = () => {
       return newCartResponse.data;
     } catch (error: any) {
       console.error("Failed to create shopping cart:", error);
-      alert(
-        `Failed to create shopping cart: ${
+      setModalMessage({
+        title: "Cart Creation Failed",
+        message: `Failed to create shopping cart: ${
           error.response?.data?.message || error.message
         }`
-      );
+      });
+      setShowError(true);
       return null;
     }
   };
@@ -160,14 +167,20 @@ const ShoppingCart = () => {
         queryKey: [`/api/v1/items/cart/${targetCart.id}`],
       });
 
-      alert("Component added to cart!");
+      setModalMessage({
+        title: "Component Added",
+        message: "Component added to cart!"
+      });
+      setShowSuccess(true);
     } catch (error: any) {
       console.error("Failed to add component:", error);
-      alert(
-        `Failed to add component: ${
+      setModalMessage({
+        title: "Add Component Failed",
+        message: `Failed to add component: ${
           error.response?.data?.message || error.message
         }`
-      );
+      });
+      setShowError(true);
     }
   };
 
@@ -191,11 +204,13 @@ const ShoppingCart = () => {
       }
     } catch (error: any) {
       console.error("Failed to update quantity:", error);
-      alert(
-        `Failed to update quantity: ${
+      setModalMessage({
+        title: "Update Quantity Failed",
+        message: `Failed to update quantity: ${
           error.response?.data?.message || error.message
         }`
-      );
+      });
+      setShowError(true);
     }
   };
 
@@ -213,25 +228,30 @@ const ShoppingCart = () => {
         });
       }
 
-      alert("Item removed from cart");
+      setModalMessage({
+        title: "Item Removed",
+        message: "Item removed from cart"
+      });
+      setShowSuccess(true);
     } catch (error: any) {
       console.error("Failed to remove item:", error);
-      alert(
-        `Failed to remove item: ${
+      setModalMessage({
+        title: "Remove Item Failed",
+        message: `Failed to remove item: ${
           error.response?.data?.message || error.message
         }`
-      );
+      });
+      setShowError(true);
     }
   };
 
   const handleClearCart = async () => {
     if (!shoppingCart) return;
+    setShowClearConfirm(true);
+  };
 
-    const confirmClear = window.confirm(
-      `Are you sure you want to remove all items from your cart? 
-This action cannot be undone.`
-    );
-    if (!confirmClear) return;
+  const handleClearConfirmed = async () => {
+    if (!shoppingCart) return;
 
     try {
       await clearCartMutation.mutateAsync({ cartId: shoppingCart.id! });
@@ -244,14 +264,12 @@ This action cannot be undone.`
         queryKey: [`/api/v1/items/cart/${shoppingCart.id}`],
       });
 
-      alert("All items removed from cart successfully");
+      // Success handled by modal closing
     } catch (error: any) {
       console.error("Failed to clear cart:", error);
-      alert(
-        `Failed to clear cart: ${
-          error.response?.data?.message || error.message
-        }`
-      );
+      // Error handling could be improved with a toast or error modal
+    } finally {
+      setShowClearConfirm(false);
     }
   };
 
@@ -649,6 +667,40 @@ This action cannot be undone.`
           cart={shoppingCart}
         />
       )}
+
+      {/* Clear Cart Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showClearConfirm}
+        onClose={() => setShowClearConfirm(false)}
+        onConfirm={handleClearConfirmed}
+        title="Clear Cart"
+        message="Are you sure you want to remove all items from your cart? This action cannot be undone."
+        confirmText="Clear All"
+        cancelText="Cancel"
+        variant="danger"
+      />
+
+      {/* Success Modal */}
+      <ConfirmModal
+        isOpen={showSuccess}
+        onClose={() => setShowSuccess(false)}
+        onConfirm={() => setShowSuccess(false)}
+        title={modalMessage.title}
+        message={modalMessage.message}
+        confirmText="OK"
+        variant="info"
+      />
+
+      {/* Error Modal */}
+      <ConfirmModal
+        isOpen={showError}
+        onClose={() => setShowError(false)}
+        onConfirm={() => setShowError(false)}
+        title={modalMessage.title}
+        message={modalMessage.message}
+        confirmText="OK"
+        variant="danger"
+      />
     </div>
   );
 };

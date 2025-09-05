@@ -496,15 +496,15 @@ function selectBestComponent(
 
   if (candidates.length === 0) return null;
 
-  // Apply budget filtering (be more lenient)
-  const maxBudget = Math.max(
+  // Apply strict budget filtering to prevent overages
+  const maxBudget = Math.min(
     preference.maxPrice || 1000,
-    remainingBudget * 0.8 // Allow up to 80% of remaining budget
+    remainingBudget * 0.6 // Only use 60% of remaining budget to leave room for other components
   );
   
   candidates = candidates.filter((component) => {
     const price = Number(component.price) || 0;
-    return price <= maxBudget;
+    return price <= maxBudget && price > 0; // Ensure valid price
   });
 
   // If no candidates after budget filtering, relax budget constraint
@@ -547,13 +547,17 @@ function selectBestComponent(
       (current.price || 0) < (cheapest.price || 0) ? current : cheapest
     );
   } else {
-    // Performance builds: pick from top performers
+    // Performance builds: pick from top performers consistently
     const sortedByPrice = candidates.sort(
       (a, b) => (b.price || 0) - (a.price || 0)
     );
-    // Pick from top 3 to avoid outliers
+    // Pick from top 3 to avoid outliers, but do it consistently
     const topChoices = sortedByPrice.slice(0, Math.min(3, sortedByPrice.length));
-    return topChoices[Math.floor(Math.random() * topChoices.length)];
+    
+    // Use deterministic selection instead of random to prevent cycling
+    // Select based on template ID hash to ensure consistency
+    const templateHash = template.id.length % topChoices.length;
+    return topChoices[templateHash];
   }
 }
 
