@@ -160,24 +160,19 @@ class AuthService {
 
   /**
    * Refresh the access token using refresh token
-   * Future: Implement with backend JWT refresh endpoint
    */
   async refreshAccessToken(): Promise<boolean> {
     try {
       const refreshToken = this.getRefreshToken();
       if (!refreshToken) return false;
 
-      // Future implementation:
-      // const response = await axios.post('/api/v1/auth/refresh', {
-      //   refreshToken
-      // });
-
-      // const { accessToken, expiresAt } = response.data;
-      // this.setTokens({
-      //   accessToken,
-      //   refreshToken, // Keep existing refresh token
-      //   expiresAt
-      // });
+      const response = await authAPI.refreshToken(refreshToken);
+      
+      this.setTokens({
+        accessToken: response.accessToken,
+        refreshToken: response.refreshToken,
+        expiresAt: response.expiresAt
+      });
 
       return true;
     } catch (error) {
@@ -231,51 +226,51 @@ class AuthService {
 // Export singleton instance
 export const authService = AuthService.getInstance();
 
-// Future: Authentication API calls (to be implemented when backend is ready)
+// JWT Authentication API calls
 export const authAPI = {
   /**
    * Authenticate user with email/password
-   * Future: Replace current email lookup with proper authentication
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  login: async (_email: string, _password: string) => {
-    // Parameters are intentionally unused - for future JWT implementation
-    // Future implementation:
-    // const response = await axios.post('/api/v1/auth/login', {
-    //   email: _email,
-    //   password: _password
-    // });
-    // return response.data;
-
-    throw new Error("JWT authentication not yet implemented");
+  login: async (email: string, password: string) => {
+    const response = await axios.post('/api/v1/auth/login', {
+      email,
+      password
+    });
+    return response.data;
   },
 
   /**
    * Register new user account
-   * Future: Use proper signup endpoint with password hashing
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  signup: async (_userData: {
+  signup: async (userData: {
     name: string;
     email: string;
     password: string;
     budget?: number;
   }) => {
-    // Parameter is intentionally unused - for future JWT implementation
-    // Future implementation:
-    // const response = await axios.post('/api/v1/auth/signup', _userData);
-    // return response.data;
+    const response = await axios.post('/api/v1/auth/signup', userData);
+    return response.data;
+  },
 
-    throw new Error("JWT signup not yet implemented");
+  /**
+   * Refresh access token using refresh token
+   */
+  refreshToken: async (refreshToken: string) => {
+    const response = await axios.post('/api/v1/auth/refresh', {
+      refreshToken
+    });
+    return response.data;
   },
 
   /**
    * Logout user and invalidate tokens
    */
   logout: async () => {
-    // Future: Call backend to invalidate refresh token
-    // await axios.post('/api/v1/auth/logout');
-
+    try {
+      await axios.post('/api/v1/auth/logout');
+    } catch (error) {
+      console.error('Logout API call failed:', error);
+    }
     authService.clearAuth();
   },
 
@@ -283,11 +278,19 @@ export const authAPI = {
    * Verify current authentication status
    */
   verifyAuth: async () => {
-    // Future: Verify token with backend
-    // const response = await axios.get('/api/v1/auth/verify');
-    // return response.data;
+    const response = await axios.get('/api/v1/auth/verify');
+    return response.data;
+  },
 
-    return authService.validateCurrentAuth();
+  /**
+   * Change password for authenticated user
+   */
+  changePassword: async (currentPassword: string, newPassword: string) => {
+    const response = await axios.post('/api/v1/auth/change-password', {
+      currentPassword,
+      newPassword
+    });
+    return response.data;
   },
 };
 

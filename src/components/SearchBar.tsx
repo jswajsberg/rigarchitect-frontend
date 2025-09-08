@@ -31,7 +31,7 @@ const SearchBar = ({
   onFilterChange,
   inStockOnly,
   onInStockOnlyChange,
-  componentTypes,
+  componentTypes: _componentTypes,
   onClearAllFilters,
   disabled = false,
 }: SearchBarProps) => {

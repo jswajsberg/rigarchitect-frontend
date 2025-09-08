@@ -66,3 +66,4 @@ github-copilot.*
 # General AI cache/config
 *.ai-cache
 *.ai-config
+nul

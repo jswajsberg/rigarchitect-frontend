@@ -9,11 +9,10 @@ import React, {
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  useGetUserByEmail,
-  useCreateUser,
   useGetAllUsers, // Added to sync budget updates
 } from "../api/user-controller/user-controller";
-import type { UserResponse, UserRequest } from "../api/model";
+import type { UserResponse } from "../api/model";
+import { authAPI, authService } from "../services/AuthService";
 
 // Authentication types
 interface AuthUser extends UserResponse {
@@ -33,6 +32,11 @@ interface SignUpData {
   budget?: number;
 }
 
+interface ChangePasswordData {
+  currentPassword: string;
+  newPassword: string;
+}
+
 interface AuthContextType {
   // Current state
   user: AuthUser | null;
@@ -46,10 +50,11 @@ interface AuthContextType {
   signup: (
     userData: SignUpData
   ) => Promise<{ success: boolean; error?: string }>;
+  changePassword: (
+    passwordData: ChangePasswordData
+  ) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
 
-  // Debug/Development features
-  quickLogin: (user: UserResponse) => void;
 
   // Future JWT methods (placeholders for easy integration)
   refreshToken?: () => Promise<boolean>;
@@ -68,20 +73,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Auth state
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
-
-  // Get user by email query (only runs when we have a pending email)
-  const {
-    data: userByEmailData,
-    isLoading: emailQueryLoading,
-    error: emailQueryError,
-    refetch: refetchUserByEmail,
-  } = useGetUserByEmail(pendingEmail || "", {
-    query: {
-      enabled: !!pendingEmail,
-      retry: false,
-    },
-  });
 
   // Keep authUser budget in sync with backend data after purchases
   const { data: allUsersData } = useGetAllUsers({
@@ -91,38 +82,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     },
   });
 
-  // Create user mutation
-  const createUserMutation = useCreateUser({
-    mutation: {
-      onSuccess: (response) => {
-        if (response.data) {
-          // Auto-login after successful signup
-          setUser({ ...response.data, isAuthenticated: true });
-          setPendingEmail(null);
-          saveAuthState(response.data);
-        }
-      },
-    },
-  });
 
-  // Initialize auth state from localStorage on mount
+  // Initialize auth state from localStorage on mount and setup axios interceptors
   useEffect(() => {
     initializeAuth();
+    
+    // Setup axios interceptors for JWT tokens
+    authService.setupAxiosInterceptors();
   }, []);
 
-  // Handle user by email query result
-  useEffect(() => {
-    if (userByEmailData?.data && pendingEmail) {
-      // User found - complete login
-      const authUser: AuthUser = {
-        ...userByEmailData.data,
-        isAuthenticated: true,
-      };
-      setUser(authUser);
-      setPendingEmail(null);
-      saveAuthState(userByEmailData.data);
-    }
-  }, [userByEmailData, pendingEmail]);
 
   // Sync authUser budget with latest backend data when users data updates
   useEffect(() => {
@@ -175,7 +143,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const clearAuthState = () => {
     localStorage.removeItem("rigarchitect_auth");
-    // Future: Clear JWT tokens from httpOnly cookies or secure storage
+    // Clear JWT tokens
+    localStorage.removeItem("rigarchitect_access_token");
+    localStorage.removeItem("rigarchitect_refresh_token");
+    localStorage.removeItem("rigarchitect_token_expiry");
   };
 
   const login = async (
@@ -184,24 +155,36 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       setIsLoading(true);
 
-      // For now, we just check if user exists by email
-      // Future: Send credentials to JWT authentication endpoint
-      setPendingEmail(credentials.email);
+      // Use JWT authentication
+      const response = await authAPI.login(credentials.email, credentials.password);
+      
+      // Store JWT tokens
+      if (response.accessToken && response.refreshToken) {
+        localStorage.setItem("rigarchitect_access_token", response.accessToken);
+        localStorage.setItem("rigarchitect_refresh_token", response.refreshToken);
+        localStorage.setItem("rigarchitect_token_expiry", response.expiresAt.toString());
+      }
 
-      // Trigger the user lookup
-      await refetchUserByEmail();
+      // Set authenticated user
+      const authUser: AuthUser = {
+        ...response.user,
+        isAuthenticated: true,
+      };
+      setUser(authUser);
+      saveAuthState(response.user);
 
-      // The useEffect will handle the success case
-      if (emailQueryError) {
+      return { success: true };
+    } catch (error: any) {
+      console.error("Login error:", error);
+      
+      // Handle specific error cases
+      if (error.response?.status === 401) {
         return {
           success: false,
           error: "Invalid email or password",
         };
       }
-
-      return { success: true };
-    } catch (error) {
-      console.error("Login error:", error);
+      
       return {
         success: false,
         error: "Login failed. Please try again.",
@@ -217,30 +200,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       setIsLoading(true);
 
-      const userRequest: UserRequest = {
+      // Use JWT signup
+      const response = await authAPI.signup({
         name: userData.name,
         email: userData.email,
-        budget: userData.budget || 5000, // Default budget
-        // Future: password will be sent to backend for hashing
-        // For now, backend creates placeholder password
-      };
+        password: userData.password,
+        budget: userData.budget || 5000,
+      });
 
-      await createUserMutation.mutateAsync({ data: userRequest });
+      // Store JWT tokens
+      if (response.accessToken && response.refreshToken) {
+        localStorage.setItem("rigarchitect_access_token", response.accessToken);
+        localStorage.setItem("rigarchitect_refresh_token", response.refreshToken);
+        localStorage.setItem("rigarchitect_token_expiry", response.expiresAt.toString());
+      }
+
+      // Set authenticated user (auto-login after signup)
+      const authUser: AuthUser = {
+        ...response.user,
+        isAuthenticated: true,
+      };
+      setUser(authUser);
+      saveAuthState(response.user);
 
       return { success: true };
-    } catch (error: unknown) {
+    } catch (error: any) {
       console.error("Signup error:", error);
 
       // Handle specific error cases
-      if (
-        error &&
-        typeof error === "object" &&
-        "response" in error &&
-        error.response &&
-        typeof error.response === "object" &&
-        "status" in error.response &&
-        error.response.status === 409
-      ) {
+      if (error.response?.status === 409) {
         return {
           success: false,
           error: "An account with this email already exists",
@@ -250,6 +238,42 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return {
         success: false,
         error: "Signup failed. Please try again.",
+      };
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const changePassword = async (
+    passwordData: ChangePasswordData
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      setIsLoading(true);
+
+      await authAPI.changePassword(passwordData.currentPassword, passwordData.newPassword);
+      
+      return { success: true };
+    } catch (error: any) {
+      console.error("Password change error:", error);
+      
+      // Handle specific error cases
+      if (error.response?.status === 400) {
+        return {
+          success: false,
+          error: "Current password is incorrect",
+        };
+      }
+      
+      if (error.response?.status === 401) {
+        return {
+          success: false,
+          error: "You must be logged in to change your password",
+        };
+      }
+      
+      return {
+        success: false,
+        error: "Failed to change password. Please try again.",
       };
     } finally {
       setIsLoading(false);
@@ -266,15 +290,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Future: Invalidate JWT tokens on server
   };
 
-  const quickLogin = (userData: UserResponse) => {
-    // Debug/development feature - bypass normal login flow
-    const authUser: AuthUser = {
-      ...userData,
-      isAuthenticated: true,
-    };
-    setUser(authUser);
-    saveAuthState(userData);
-  };
 
   // Future JWT utility methods (placeholders)
   const getAuthHeaders = (): Record<string, string> => {
@@ -293,12 +308,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const contextValue: AuthContextType = {
     user,
     isAuthenticated: !!user?.isAuthenticated,
-    isLoading: isLoading || emailQueryLoading || createUserMutation.isPending,
+    isLoading: isLoading,
     login,
     signup,
+    changePassword,
     logout,
-    quickLogin,
-    // Future JWT methods
+    // JWT methods
     getAuthHeaders,
     refreshToken,
   };

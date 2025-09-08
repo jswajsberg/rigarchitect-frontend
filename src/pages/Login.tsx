@@ -1,26 +1,20 @@
 // src/pages/Login.tsx - Enhanced with professional Lucide icons and modern styling
 import React, { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import { useGetAllUsers } from "../api/user-controller/user-controller";
 import AuthLayout from "../components/AuthLayout";
-import type { UserResponse } from "../api/model";
 import {
   Mail,
   Lock,
   LogIn,
   Loader2,
   UserPlus,
-  Code2,
   Eye,
   EyeOff,
   AlertCircle,
-  User,
-  DollarSign,
-  Zap,
 } from "lucide-react";
 
 const Login: React.FC = () => {
-  const { login, quickLogin, isLoading } = useAuth();
+  const { login, isLoading } = useAuth();
 
   // Form state
   const [formData, setFormData] = useState({
@@ -31,14 +25,6 @@ const Login: React.FC = () => {
   const [showSignUp, setShowSignUp] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // Debug mode state
-  const [showDebugMode, setShowDebugMode] = useState(false);
-
-  // Fetch all users for debug mode
-  const { data: allUsersData, isLoading: usersLoading } = useGetAllUsers({
-    query: { enabled: showDebugMode },
-  });
-  const allUsers = allUsersData?.data || [];
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -68,14 +54,6 @@ const Login: React.FC = () => {
     }
   };
 
-  const handleQuickLogin = (user: UserResponse) => {
-    quickLogin(user);
-  };
-
-  const toggleDebugMode = () => {
-    setShowDebugMode(!showDebugMode);
-    setError(null);
-  };
 
   if (showSignUp) {
     // Dynamic import would be better, but for now we'll use a simple toggle
@@ -212,84 +190,8 @@ const Login: React.FC = () => {
           </button>
         </div>
 
-        {/* Enhanced Debug mode toggle */}
-        {process.env.NODE_ENV === "development" && (
-          <div className="border-t pt-6">
-            <button
-              type="button"
-              onClick={toggleDebugMode}
-              className="w-full flex items-center justify-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
-            >
-              <Code2 size={16} />
-              {showDebugMode ? "Hide Debug Mode" : "Show Debug Mode"}
-            </button>
-          </div>
-        )}
       </form>
 
-      {/* Enhanced Debug user selector */}
-      {showDebugMode && (
-        <div className="mt-6 border-t pt-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Zap size={16} className="text-yellow-600" />
-            <h3 className="text-sm font-medium text-gray-900">
-              Quick Login (Development Mode)
-            </h3>
-          </div>
-
-          {usersLoading ? (
-            <div className="text-center py-4">
-              <Loader2
-                size={24}
-                className="animate-spin text-blue-600 mx-auto mb-2"
-              />
-              <span className="text-sm text-gray-500">Loading users...</span>
-            </div>
-          ) : allUsers.length === 0 ? (
-            <div className="text-center py-4">
-              <User size={24} className="text-gray-400 mx-auto mb-2" />
-              <span className="text-sm text-gray-500">
-                No users found in database
-              </span>
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-40 overflow-y-auto">
-              {allUsers.map((user) => (
-                <button
-                  key={user.id}
-                  onClick={() => handleQuickLogin(user)}
-                  className="w-full text-left p-3 bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-300 rounded-lg text-sm transition-all group"
-                  disabled={isLoading}
-                >
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center group-hover:bg-blue-200 transition-colors">
-                        <User size={16} className="text-blue-600" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-900">{user.name}</p>
-                        <p className="text-gray-500 flex items-center gap-1">
-                          <Mail size={12} />
-                          {user.email}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right text-xs text-gray-400">
-                      <p className="flex items-center gap-1">
-                        <span className="text-gray-500">ID:</span> {user.id}
-                      </p>
-                      <p className="flex items-center gap-1 font-medium text-green-600">
-                        <DollarSign size={12} />
-                        {user.budget?.toLocaleString() || "0"}
-                      </p>
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
     </AuthLayout>
   );
 };
