@@ -99,7 +99,6 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
     message: string,
     type: "success" | "error" | "info" | "warning"
   ) => {
-    console.log("📱 Toast:", type, message);
     const id = Date.now() + Math.random();
     setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(() => {
@@ -120,7 +119,6 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
       let targetCart = currentCart;
 
       if (!targetCart) {
-        console.log("🛒 No cart exists, creating new one...");
         const newCartResponse = await createCartMutation.mutateAsync({
           userId: selectedUserId,
           data: { name: "My Build Cart", status: "ACTIVE" },
@@ -140,7 +138,6 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
         quantity,
       };
 
-      console.log("🛒 Creating cart item:", cartItemRequest);
       await createItemMutation.mutateAsync({ data: cartItemRequest });
 
       // Invalidate relevant queries

@@ -114,7 +114,6 @@ const PCBuilder: React.FC = () => {
   const getComponentSnapshot = useCallback(() => {
     // If we have fresh component data and no existing snapshot, create one
     if (components.length > 0 && !componentSnapshotRef.current) {
-      console.log("Creating component data snapshot for consistent template application");
       componentSnapshotRef.current = [...components]; // Deep copy of components
       setComponentSnapshotTimestamp(Date.now());
       return componentSnapshotRef.current;
@@ -130,7 +129,6 @@ const PCBuilder: React.FC = () => {
     
     // Refresh snapshot if it's too old or components have significantly changed
     if (components.length > 0) {
-      console.log("Refreshing component data snapshot");
       componentSnapshotRef.current = [...components];
       setComponentSnapshotTimestamp(Date.now());
       return componentSnapshotRef.current;
@@ -142,7 +140,6 @@ const PCBuilder: React.FC = () => {
 
   // Clear component snapshot when explicitly requested (e.g., when user manually refreshes)
   const clearComponentSnapshot = useCallback(() => {
-    console.log("Clearing component data snapshot");
     componentSnapshotRef.current = null;
     setComponentSnapshotTimestamp(null);
   }, []);
@@ -180,17 +177,8 @@ const PCBuilder: React.FC = () => {
 
   // Auto-save functionality
   const autoSave = useCallback(async () => {
-    console.log("Auto-save triggered:", {
-      selectedUserId,
-      currentBuildKeys: Object.keys(currentBuild),
-      currentBuild,
-      buildName,
-      selectedBuildId,
-      isModifyingExisting,
-    });
 
     if (!selectedUserId || Object.keys(currentBuild).length === 0) {
-      console.log("Auto-save skipped: no user or no components");
       return; // Don't auto-save if no user or no components
     }
 
@@ -207,26 +195,21 @@ const PCBuilder: React.FC = () => {
       );
       const autoName = `Auto Build ${new Date().toLocaleDateString()} (${componentCount} components)`;
       setBuildName(autoName);
-      console.log("Generated auto build name:", autoName);
     }
 
     setIsAutoSaving(true);
-    console.log("Starting auto-save...");
 
     try {
       // Skip auto-save if no existing build is selected
       if (!selectedBuildId || !isModifyingExisting) {
-        console.log("Auto-save skipped: no existing build to save to");
         return;
       }
 
       // Save the build silently (this will handle updating existing builds)
-      console.log("Saving build...");
       await handleSaveBuild(true); // Pass true for silent save
       setLastSaved(new Date());
       lastOperationRef.current = { type: 'save', timestamp: Date.now() };
       // Unsaved changes flag is managed by the build operations hook
-      console.log("Auto-save completed successfully");
     } catch (error) {
       console.error("Auto-save failed:", error);
       // Don't show error alerts for auto-save failures to avoid annoying the user
@@ -264,7 +247,6 @@ const PCBuilder: React.FC = () => {
     const handleVisibilityChange = () => {
       // Auto-save when tab becomes hidden (user switching tabs)
       if (document.hidden && hasUnsavedChanges && selectedBuildId && isModifyingExisting) {
-        console.log("Tab hidden, auto-saving...");
         autoSave();
       }
     };
@@ -291,7 +273,6 @@ const PCBuilder: React.FC = () => {
     const isLeavingBuildsTab = wasOnBuildsTab && activeTab !== 'builds';
     
     if (isLeavingBuildsTab && hasUnsavedChanges && selectedBuildId && isModifyingExisting) {
-      console.log('Navigating away from PC Builder, auto-saving...');
       autoSave();
     }
     
@@ -311,7 +292,6 @@ const PCBuilder: React.FC = () => {
     if (lastOperationRef.current) {
       const timeSinceOperation = Date.now() - lastOperationRef.current.timestamp;
       if (timeSinceOperation < 1000) { // 1 second grace period
-        console.log("Skipping unsaved changes flag - recent operation:", lastOperationRef.current.type);
         return;
       }
     }
@@ -319,7 +299,6 @@ const PCBuilder: React.FC = () => {
     // Mark as unsaved when currentBuild changes
     if (selectedUserId && Object.keys(currentBuild).length > 0) {
       setHasUnsavedChanges(true);
-      console.log("Build marked as having unsaved changes");
     }
   }, [
     currentBuild,
@@ -341,7 +320,6 @@ const PCBuilder: React.FC = () => {
     if (lastOperationRef.current) {
       const timeSinceOperation = Date.now() - lastOperationRef.current.timestamp;
       if (timeSinceOperation < 1000) { // 1 second grace period
-        console.log("Skipping unsaved changes flag for name - recent operation:", lastOperationRef.current.type);
         return;
       }
     }
@@ -349,7 +327,6 @@ const PCBuilder: React.FC = () => {
     // Mark as unsaved when build name changes
     if (selectedUserId && buildName.trim()) {
       setHasUnsavedChanges(true);
-      console.log("Build name changed, marked as unsaved");
     }
   }, [
     buildName,
@@ -629,15 +606,12 @@ const PCBuilder: React.FC = () => {
 
       // Check if this generation is still current (race condition protection)
       if (templateGenerationRef.current !== generation) {
-        console.log(`Template operation generation ${generation} superseded by ${templateGenerationRef.current}, aborting`);
         return;
       }
 
-      console.log(`Applying template: ${template.name} (generation ${generation})`);
 
       // Use consistent component snapshot for template application
       const consistentComponents = getComponentSnapshot();
-      console.log(`Using component snapshot with ${consistentComponents.length} components for template application`);
 
       // Apply the new template (this is synchronous)
       const { suggestedBuild, missingComponents, budgetWarnings } =
@@ -645,7 +619,6 @@ const PCBuilder: React.FC = () => {
 
       // Final generation check before setting any state
       if (templateGenerationRef.current !== generation) {
-        console.log(`Template operation generation ${generation} superseded during processing, aborting`);
         return;
       }
 
@@ -676,9 +649,7 @@ const PCBuilder: React.FC = () => {
           setIsModifyingExisting(false);
           setUserExplicitlyCleared(false);
           
-          console.log(`Template ${template.name} applied successfully (generation ${generation})`);
         } else {
-          console.log(`Template operation generation ${generation} superseded in final state update`);
         }
       });
 
@@ -686,23 +657,6 @@ const PCBuilder: React.FC = () => {
       setIsApplyingTemplate(false);
 
       // Log missing components for debugging
-      if (missingComponents.length > 0) {
-        console.log(
-          `Template "${template.name}" missing components:`,
-          missingComponents
-        );
-        missingComponents.forEach((missing) => {
-          console.log(`- ${missing.componentType}: ${missing.details}`);
-        });
-      }
-
-      // Log budget warnings
-      if (budgetWarnings.length > 0) {
-        console.log(
-          `Template "${template.name}" budget warnings:`,
-          budgetWarnings
-        );
-      }
     },
     [
       getComponentSnapshot,
@@ -721,7 +675,6 @@ const PCBuilder: React.FC = () => {
       if (templateTimeoutRef.current) {
         clearTimeout(templateTimeoutRef.current);
         templateTimeoutRef.current = null;
-        console.log(`Cancelled pending template application`);
       }
 
       // Increment generation - this invalidates all previous operations
@@ -731,7 +684,6 @@ const PCBuilder: React.FC = () => {
       // Update template tracking
       currentTemplateRef.current = templateId;
       
-      console.log(`Starting template application: ${templateId} (generation ${currentGeneration})`);
 
       // If not currently applying, start immediately
       if (!isApplyingTemplate) {
@@ -739,14 +691,11 @@ const PCBuilder: React.FC = () => {
         applyTemplateInternal(templateId, currentGeneration);
       } else {
         // If already applying, debounce but with generation tracking
-        console.log(`Template application in progress, debouncing ${templateId} (generation ${currentGeneration})`);
         templateTimeoutRef.current = setTimeout(() => {
           // Only proceed if this generation is still current
           if (templateGenerationRef.current === currentGeneration) {
-            console.log(`Applying debounced template: ${templateId} (generation ${currentGeneration})`);
             applyTemplateInternal(templateId, currentGeneration);
           } else {
-            console.log(`Debounced template ${templateId} (generation ${currentGeneration}) was superseded`);
           }
           templateTimeoutRef.current = null;
         }, 500); // Increased from 100ms to 500ms to better handle rapid clicks
