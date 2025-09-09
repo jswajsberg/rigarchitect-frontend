@@ -1,4 +1,6 @@
-// src/modals/BuildNameModal.tsx
+/**
+ * Modal for creating build names with optional price range selection
+ */
 import React, { useState, useEffect } from "react";
 
 interface BuildNameModalProps {
@@ -11,6 +13,11 @@ interface BuildNameModalProps {
   includePriceRange?: boolean;
 }
 
+/**
+ * Modal for naming builds with optional budget range selection and preset options
+ * @param {BuildNameModalProps} props - Modal props with name input and optional price range
+ * @returns {JSX.Element | null} Build naming modal or null if closed
+ */
 const BuildNameModal: React.FC<BuildNameModalProps> = ({
   isOpen,
   onClose,

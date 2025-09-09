@@ -1,4 +1,7 @@
-// src/components/UserSelector.tsx
+/**
+ * Dropdown selector for choosing active user
+ * @returns {JSX.Element} User selection dropdown with loading and error states
+ */
 import React from "react";
 import { useUserContext } from "../contexts/UserContext";
 import type { UserResponse } from "../api/model";

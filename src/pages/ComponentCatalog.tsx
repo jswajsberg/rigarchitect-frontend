@@ -1,4 +1,7 @@
-// src/pages/ComponentCatalog.tsx - Fixed version with proper prop handling
+/**
+ * Component catalog page with search, filtering, and cart operations
+ * @returns {JSX.Element} Component catalog with pagination and cart functionality
+ */
 import React, { useState, useMemo } from "react";
 import { useSelectedUserId } from "../contexts/UserContext";
 import { useQueryClient } from "@tanstack/react-query";

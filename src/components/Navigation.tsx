@@ -1,4 +1,8 @@
-// src/components/Navigation.tsx - Enhanced with professional Lucide icons
+/**
+ * Main navigation component with tab switching and user menu
+ * @param {NavigationProps} props - Active tab state and setter function
+ * @returns {JSX.Element} Navigation bar with tabs, budget controls, and user menu
+ */
 import React, { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useCart } from "../contexts/CartContext";
@@ -326,7 +330,11 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
   );
 };
 
-// Change Password Modal Component
+/**
+ * Modal for changing user password with validation
+ * @param {ChangePasswordModalProps} props - Close callback function
+ * @returns {JSX.Element} Password change modal with form validation
+ */
 interface ChangePasswordModalProps {
   onClose: () => void;
 }

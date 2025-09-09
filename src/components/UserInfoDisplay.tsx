@@ -1,4 +1,8 @@
-// src/components/UserInfoDisplay.tsx
+/**
+ * Displays user information in compact or detailed format
+ * @param {UserInfoDisplayProps} props - Display options for email and variant
+ * @returns {JSX.Element} User info display with loading and empty states
+ */
 import React from "react";
 import { useUserContext } from "../contexts/UserContext";
 

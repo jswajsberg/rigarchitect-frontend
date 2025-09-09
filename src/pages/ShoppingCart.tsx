@@ -1,4 +1,7 @@
-// src/pages/ShoppingCart.tsx - Enhanced with colorized Lucide icons and consistent design
+/**
+ * Shopping cart page for managing checkout items
+ * @returns {JSX.Element} Shopping cart with item management and checkout functionality
+ */
 import { useState, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSelectedUserId } from "../contexts/UserContext";

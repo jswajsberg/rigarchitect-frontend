@@ -1,5 +1,8 @@
+/**
+ * Navigation context for managing active tab state with persistence
+ * @module NavigationContext
+ */
 /* eslint-disable react-refresh/only-export-components */
-// src/contexts/NavigationContext.tsx - Enhanced with tab persistence
 import {
   createContext,
   useContext,

@@ -1,4 +1,7 @@
-// src/pages/PCBuilder/index.tsx
+/**
+ * PC Builder page with templates, compatibility checking, and auto-save
+ * @returns {JSX.Element} Full PC builder interface with component slots and suggestions
+ */
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { useSelectedUserId } from "../../contexts/UserContext";
 import { useNavigation } from "../../contexts/NavigationContext";

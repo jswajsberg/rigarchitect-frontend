@@ -1,4 +1,7 @@
-// src/pages/Login.tsx - Enhanced with professional Lucide icons and modern styling
+/**
+ * User login page with authentication and navigation to signup
+ * @returns {JSX.Element} Login form with validation and error handling
+ */
 import React, { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import AuthLayout from "../components/AuthLayout";

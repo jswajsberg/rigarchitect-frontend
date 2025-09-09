@@ -1,4 +1,8 @@
-// src/pages/SignUp.tsx - Enhanced with professional Lucide icons and modern styling
+/**
+ * User registration page with form validation
+ * @param {SignUpProps} props - Callback to return to login page
+ * @returns {JSX.Element} Signup form with validation and success handling
+ */
 import React, { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import AuthLayout from "../components/AuthLayout";

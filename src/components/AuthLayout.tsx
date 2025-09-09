@@ -1,4 +1,8 @@
-// src/components/AuthLayout.tsx - Enhanced with professional Lucide icons and modern styling
+/**
+ * Shared layout component for authentication pages with branding
+ * @param {AuthLayoutProps} props - Content, title, and optional subtitle
+ * @returns {JSX.Element} Styled auth layout with consistent branding
+ */
 import React from "react";
 import { Wrench } from "lucide-react";
 
@@ -8,10 +12,6 @@ interface AuthLayoutProps {
   subtitle?: string;
 }
 
-/**
- * Enhanced shared layout component for authentication pages (Login, SignUp).
- * Provides consistent styling and branding across auth flows with modern design.
- */
 const AuthLayout: React.FC<AuthLayoutProps> = ({
   children,
   title,

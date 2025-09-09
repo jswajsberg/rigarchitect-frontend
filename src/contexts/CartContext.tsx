@@ -1,5 +1,8 @@
+/**
+ * Cart context for managing shopping cart operations and toast notifications
+ * @module CartContext
+ */
 /* eslint-disable react-refresh/only-export-components */
-// src/contexts/CartContext.tsx - Enhanced with warning toast support
 import React, { createContext, useContext, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {

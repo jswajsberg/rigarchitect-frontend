@@ -1,4 +1,6 @@
-// src/modals/ComponentReplacementModal.tsx
+/**
+ * Modal for confirming component replacement in builds with visual comparison
+ */
 import React from "react";
 import type { ComponentResponse } from "../api/model";
 import {
@@ -25,6 +27,11 @@ interface ComponentReplacementModalProps {
   buildName: string;
 }
 
+/**
+ * Modal for component replacement confirmation with side-by-side comparison and price difference
+ * @param {ComponentReplacementModalProps} props - Modal props with current and new component data
+ * @returns {JSX.Element | null} Component replacement modal or null if closed
+ */
 const ComponentReplacementModal: React.FC<ComponentReplacementModalProps> = ({
   isOpen,
   onClose,

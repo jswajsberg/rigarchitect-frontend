@@ -1,5 +1,8 @@
+/**
+ * Authentication context providing login, signup, and user session management
+ * @module AuthContext
+ */
 /* eslint-disable react-refresh/only-export-components */
-// src/contexts/AuthContext.tsx
 import React, {
   createContext,
   useContext,

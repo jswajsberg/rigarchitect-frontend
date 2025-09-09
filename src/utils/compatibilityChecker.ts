@@ -1,4 +1,7 @@
-// src/utils/compatibilityChecker.ts
+/**
+ * PC build compatibility checker with validation rules and component suggestions
+ * @module CompatibilityChecker
+ */
 import type { ComponentResponse } from "../api/model";
 
 export interface CompatibilityIssue {
@@ -44,6 +47,8 @@ const POWER_ESTIMATES = {
 
 /**
  * Main compatibility checker for PC build validation
+ * @param {BuildSlots} build - The PC build configuration to validate
+ * @returns {BuildCompatibilityResult} Compatibility status with issues and power consumption
  */
 export function checkBuildCompatibility(
   build: BuildSlots
@@ -78,6 +83,8 @@ export function checkBuildCompatibility(
 
 /**
  * Check CPU and motherboard socket compatibility
+ * @param {BuildSlots} build - Build configuration
+ * @returns {CompatibilityIssue[]} Socket compatibility issues
  */
 function checkSocketCompatibility(build: BuildSlots): CompatibilityIssue[] {
   const issues: CompatibilityIssue[] = [];
@@ -105,6 +112,8 @@ function checkSocketCompatibility(build: BuildSlots): CompatibilityIssue[] {
 
 /**
  * Check CPU cooler socket compatibility
+ * @param {BuildSlots} build - Build configuration
+ * @returns {CompatibilityIssue[]} Cooler compatibility issues
  */
 function checkCoolerCompatibility(build: BuildSlots): CompatibilityIssue[] {
   const issues: CompatibilityIssue[] = [];
@@ -132,6 +141,8 @@ function checkCoolerCompatibility(build: BuildSlots): CompatibilityIssue[] {
 
 /**
  * Check memory (RAM) compatibility with CPU and motherboard
+ * @param {BuildSlots} build - Build configuration
+ * @returns {CompatibilityIssue[]} Memory compatibility issues
  */
 function checkMemoryCompatibility(build: BuildSlots): CompatibilityIssue[] {
   const issues: CompatibilityIssue[] = [];
@@ -224,6 +235,8 @@ function checkMemoryCompatibility(build: BuildSlots): CompatibilityIssue[] {
 
 /**
  * Check power requirements and PSU compatibility
+ * @param {BuildSlots} build - Build configuration
+ * @returns {Object} Power compatibility result with issues and consumption data
  */
 function checkPowerCompatibility(build: BuildSlots): {
   issues: CompatibilityIssue[];
@@ -282,6 +295,8 @@ function checkPowerCompatibility(build: BuildSlots): {
 
 /**
  * Check physical compatibility (dimensions, form factors)
+ * @param {BuildSlots} build - Build configuration
+ * @returns {CompatibilityIssue[]} Physical compatibility issues
  */
 function checkPhysicalCompatibility(build: BuildSlots): CompatibilityIssue[] {
   const issues: CompatibilityIssue[] = [];
@@ -331,6 +346,8 @@ function checkPhysicalCompatibility(build: BuildSlots): CompatibilityIssue[] {
 
 /**
  * Check general component compatibility
+ * @param {BuildSlots} build - Build configuration
+ * @returns {CompatibilityIssue[]} General compatibility issues
  */
 function checkGeneralCompatibility(build: BuildSlots): CompatibilityIssue[] {
   const issues: CompatibilityIssue[] = [];
@@ -360,6 +377,8 @@ function checkGeneralCompatibility(build: BuildSlots): CompatibilityIssue[] {
 
 /**
  * Enhanced power estimation using metadata field with proper type guards
+ * @param {ComponentResponse} component - Component to estimate power for
+ * @returns {number} Estimated power consumption in watts
  */
 function estimateComponentPower(component: ComponentResponse): number {
   // First priority: actual wattage field
@@ -430,6 +449,8 @@ function estimateComponentPower(component: ComponentResponse): number {
 
 /**
  * Fallback hardcoded power estimation (existing logic)
+ * @param {ComponentResponse} component - Component to estimate power for
+ * @returns {number} Estimated power consumption in watts
  */
 function getHardcodedPowerEstimate(component: ComponentResponse): number {
   const name = component.name?.toLowerCase() || "";
@@ -522,6 +543,9 @@ function getHardcodedPowerEstimate(component: ComponentResponse): number {
 
 /**
  * Enhanced form factor compatibility checking
+ * @param {string} mbFormFactor - Motherboard form factor
+ * @param {string} caseFormFactor - Case form factor
+ * @returns {boolean} True if compatible
  */
 function isFormFactorCompatible(
   mbFormFactor: string,
@@ -571,6 +595,11 @@ function isFormFactorCompatible(
 
 /**
  * Enhanced component suggestions with metadata-aware sorting
+ * @param {BuildSlots} build - Current build configuration
+ * @param {keyof BuildSlots} targetType - Component type to suggest for
+ * @param {ComponentResponse[] | { data: ComponentResponse[] }} allComponents - Available components
+ * @param {Object} [priceRange] - Budget constraints
+ * @returns {ComponentResponse[]} Sorted list of compatible component suggestions
  */
 export function getComponentSuggestions(
   build: BuildSlots,

@@ -1,4 +1,8 @@
-// src/pages/PCBuilder/ComponentSlot.tsx - Enhanced with colorized Lucide icons
+/**
+ * Component slot for PC builder with suggestions and compatibility warnings
+ * @param {ComponentSlotProps} props - Slot configuration and component handlers
+ * @returns {JSX.Element} Component slot with add/remove functionality and suggestions
+ */
 import React, { useState, useEffect } from "react";
 import type { ComponentResponse } from "../../api/model";
 import type { CompatibilityIssue } from "../../utils/compatibilityChecker";

@@ -1,4 +1,7 @@
-// src/services/AuthService.tsx - Future JWT integration utilities
+/**
+ * Authentication service for JWT token management and API integration
+ * @module AuthService
+ */
 import axios from "axios";
 
 // Future JWT token structure

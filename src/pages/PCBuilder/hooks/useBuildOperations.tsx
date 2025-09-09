@@ -1,4 +1,8 @@
-// src/components/PCBuilder/hooks/useBuildOperations.tsx
+/**
+ * Hook for managing PC builder operations like save, load, delete, and add to cart
+ * @param {UseBuildOperationsProps} props - Configuration and mutation objects
+ * @returns {Object} Build operation handlers and modal states
+ */
 import { useCallback, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCart } from "../../../contexts/CartContext";
