@@ -629,28 +629,43 @@ export function getComponentSuggestions(
       // Filter by price range - consider build context
       if (priceRange) {
         const price = Number(component.price) || 0;
-        
+
         // Calculate current build total (excluding the target component type if it exists)
-        const currentBuildTotal = Object.entries(build).reduce((total, [slotType, slotComponent]) => {
-          // Skip the target type we're suggesting for (we'll replace/add to it)
-          if (slotType === targetType) return total;
-          
-          if (Array.isArray(slotComponent)) {
-            return total + slotComponent.reduce((sum, comp) => sum + (Number(comp.price) || 0), 0);
-          } else if (slotComponent) {
-            return total + (Number(slotComponent.price) || 0);
-          }
-          return total;
-        }, 0);
-        
+        const currentBuildTotal = Object.entries(build).reduce(
+          (total, [slotType, slotComponent]) => {
+            // Skip the target type we're suggesting for (we'll replace/add to it)
+            if (slotType === targetType) return total;
+
+            if (Array.isArray(slotComponent)) {
+              return (
+                total +
+                slotComponent.reduce(
+                  (sum, comp) => sum + (Number(comp.price) || 0),
+                  0
+                )
+              );
+            } else if (slotComponent) {
+              return total + (Number(slotComponent.price) || 0);
+            }
+            return total;
+          },
+          0
+        );
+
         // Calculate remaining budget for this component
         const totalBudget = priceRange.max;
         const remainingBudget = Math.max(0, totalBudget - currentBuildTotal);
-        
+
         // For very tight budgets, be more flexible but still reasonable
-        const minBudgetForComponent = Math.min(priceRange.min * 0.3, remainingBudget * 0.1);
-        const maxBudgetForComponent = Math.max(remainingBudget * 1.2, priceRange.min);
-        
+        const minBudgetForComponent = Math.min(
+          priceRange.min * 0.3,
+          remainingBudget * 0.1
+        );
+        const maxBudgetForComponent = Math.max(
+          remainingBudget * 1.2,
+          priceRange.min
+        );
+
         // Filter out components that are way outside the practical budget
         if (price > maxBudgetForComponent || price < minBudgetForComponent) {
           return false;
@@ -676,15 +691,23 @@ export function getComponentSuggestions(
 
       // If build is empty, be more lenient with compatibility
       const buildIsEmpty = Object.keys(build).length === 0;
-      
+
       if (buildIsEmpty) {
         // For empty builds, only check basic compatibility (socket matching for CPU/Motherboard)
-        if (targetType === "CPU" && build.Motherboard?.socket && component.socket) {
+        if (
+          targetType === "CPU" &&
+          build.Motherboard?.socket &&
+          component.socket
+        ) {
           if (component.socket !== build.Motherboard.socket) {
             return false;
           }
         }
-        if (targetType === "Motherboard" && build.CPU?.socket && component.socket) {
+        if (
+          targetType === "Motherboard" &&
+          build.CPU?.socket &&
+          component.socket
+        ) {
           if (component.socket !== build.CPU.socket) {
             return false;
           }
@@ -694,7 +717,8 @@ export function getComponentSuggestions(
       }
 
       const compatibility = checkBuildCompatibility(testBuild);
-      const hasErrors = compatibility.issues.filter((i) => i.type === "error").length > 0;
+      const hasErrors =
+        compatibility.issues.filter((i) => i.type === "error").length > 0;
 
       // Only suggest if it doesn't introduce errors
       return !hasErrors;
@@ -762,33 +786,42 @@ export function getComponentSuggestions(
       if (priceRange) {
         const aPrice = Number(a.price) || 0;
         const bPrice = Number(b.price) || 0;
-        
+
         // Calculate current build cost (excluding target component type)
-        const currentBuildTotal = Object.entries(build).reduce((total, [slotType, slotComponent]) => {
-          if (slotType === targetType) return total;
-          
-          if (Array.isArray(slotComponent)) {
-            return total + slotComponent.reduce((sum, comp) => sum + (Number(comp.price) || 0), 0);
-          } else if (slotComponent) {
-            return total + (Number(slotComponent.price) || 0);
-          }
-          return total;
-        }, 0);
-        
+        const currentBuildTotal = Object.entries(build).reduce(
+          (total, [slotType, slotComponent]) => {
+            if (slotType === targetType) return total;
+
+            if (Array.isArray(slotComponent)) {
+              return (
+                total +
+                slotComponent.reduce(
+                  (sum, comp) => sum + (Number(comp.price) || 0),
+                  0
+                )
+              );
+            } else if (slotComponent) {
+              return total + (Number(slotComponent.price) || 0);
+            }
+            return total;
+          },
+          0
+        );
+
         const totalBudget = priceRange.max;
         const remainingBudget = Math.max(0, totalBudget - currentBuildTotal);
-        
+
         // Score based on how well the price fits the remaining budget
         // Perfect fit (using 60-80% of remaining budget) gets highest score
         const idealSpend = remainingBudget * 0.7;
-        
+
         const aPriceFit = Math.abs(aPrice - idealSpend) / remainingBudget;
         const bPriceFit = Math.abs(bPrice - idealSpend) / remainingBudget;
-        
+
         // Better price fit gets higher score (lower distance from ideal)
         if (aPriceFit < bPriceFit) scoreA += 3;
         if (bPriceFit < aPriceFit) scoreB += 3;
-        
+
         // Bonus for components that leave room for other components
         if (aPrice <= remainingBudget * 0.8) scoreA += 1;
         if (bPrice <= remainingBudget * 0.8) scoreB += 1;
