@@ -4,7 +4,7 @@
  * @returns {JSX.Element} Navigation bar with tabs, budget controls, and user menu
  */
 import React, { useState } from "react";
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth, useAuthMode } from "../contexts/AuthContext";
 import { useCart } from "../contexts/CartContext";
 import { useUpdateUserBudget } from "../api/user-controller/user-controller";
 import { useQueryClient } from "@tanstack/react-query";
@@ -15,6 +15,8 @@ import {
   ShoppingCart, // Shopping Cart
   User, // User menu
   LogOut, // Logout
+  LogIn, // Guest login
+  UserPlus, // Guest signup
   Edit3, // Edit budget
   Save, // Save budget
   X, // Cancel budget edit
@@ -35,10 +37,13 @@ interface NavigationProps {
 
 const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
   const { user: authUser, logout } = useAuth();
+  const { mode, isAuthenticated, isGuest } = useAuthMode();
   const { shoppingCartItemCount } = useCart();
   const queryClient = useQueryClient();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showGuestMenu, setShowGuestMenu] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState<'login' | 'signup' | null>(null);
 
   // Budget editing state
   const [isEditingBudget, setIsEditingBudget] = useState(false);
@@ -60,7 +65,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
     },
   });
 
-  // Enhanced tabs with professional Lucide icons
+  // Enhanced tabs with professional Lucide icons - adjusted for guest vs authenticated
   const tabs = [
     {
       id: "components",
@@ -70,23 +75,23 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
     },
     {
       id: "builds",
-      label: "PC Builder",
+      label: isGuest ? "Build PC" : "PC Builder",
       icon: Wrench,
       color: "text-purple-600",
     },
-    {
+    ...(isAuthenticated ? [{
       id: "orders",
       label: "Order History",
       icon: Package,
       color: "text-green-600",
-    },
-    {
+    }] : []),
+    ...(!isGuest ? [{
       id: "cart",
       label: "Shopping Cart",
       icon: ShoppingCart,
       color: "text-orange-600",
       badge: shoppingCartItemCount > 0 ? shoppingCartItemCount : undefined,
-    },
+    }] : []),
   ];
 
   const handleLogout = () => {
@@ -168,10 +173,10 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
             </div>
           </div>
 
-          {/* Right - Enhanced User Menu */}
+          {/* Right - Enhanced User/Guest Menu */}
           <div className="ml-auto flex items-center space-x-4">
-            {/* Budget Display */}
-            {authUser && (
+            {/* Budget Display - Only for authenticated users */}
+            {isAuthenticated && authUser && (
               <div className="flex items-center gap-2 text-sm">
                 <DollarSign size={16} className="text-green-600" />
                 <span className="text-gray-600">Budget:</span>
@@ -220,8 +225,29 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
               </div>
             )}
 
-            {/* Enhanced User Menu */}
-            {authUser && (
+            {/* Guest Mode Buttons */}
+            {isGuest && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600">Guest Mode</span>
+                <button
+                  onClick={() => setShowAuthModal('login')}
+                  className="flex items-center gap-2 px-3 py-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors text-sm font-medium"
+                >
+                  <LogIn size={16} />
+                  <span>Sign In</span>
+                </button>
+                <button
+                  onClick={() => setShowAuthModal('signup')}
+                  className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+                >
+                  <UserPlus size={16} />
+                  <span>Sign Up</span>
+                </button>
+              </div>
+            )}
+
+            {/* Enhanced User Menu - Only for authenticated users */}
+            {isAuthenticated && authUser && (
               <div className="relative">
                 <button
                   onClick={() => setShowUserMenu(!showUserMenu)}
@@ -312,7 +338,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
         </div>
       </div>
 
-      {/* Click outside to close user menu */}
+      {/* Click outside to close menus */}
       {showUserMenu && (
         <div
           className="fixed inset-0 z-40"
@@ -324,6 +350,14 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
       {showChangePassword && (
         <ChangePasswordModal
           onClose={() => setShowChangePassword(false)}
+        />
+      )}
+
+      {/* Auth Modal */}
+      {showAuthModal && (
+        <AuthModal
+          mode={showAuthModal}
+          onClose={() => setShowAuthModal(null)}
         />
       )}
     </nav>
@@ -599,6 +633,276 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ onClose }) =>
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * Modal for login/signup for guest users
+ * @param {AuthModalProps} props - Mode and close callback
+ * @returns {JSX.Element} Auth modal with login or signup form
+ */
+interface AuthModalProps {
+  mode: 'login' | 'signup';
+  onClose: () => void;
+}
+
+const AuthModal: React.FC<AuthModalProps> = ({ mode, onClose }) => {
+  const { login, signup, isLoading } = useAuth();
+  const [isSignup, setIsSignup] = useState(mode === 'signup');
+  
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    password: "",
+    budget: "5000"
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+    // Clear messages when user starts typing
+    if (error) setError(null);
+    if (success) setSuccess(null);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Basic validation
+    if (!formData.email || !formData.password) {
+      setError("Please fill in all required fields");
+      return;
+    }
+
+    if (isSignup && !formData.name) {
+      setError("Please enter your name");
+      return;
+    }
+
+    if (formData.password.length < 6) {
+      setError("Password must be at least 6 characters long");
+      return;
+    }
+
+    try {
+      let result;
+      
+      if (isSignup) {
+        result = await signup({
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+          budget: parseFloat(formData.budget) || 5000
+        });
+      } else {
+        result = await login({
+          email: formData.email,
+          password: formData.password
+        });
+      }
+
+      if (result.success) {
+        setSuccess(isSignup ? "Account created successfully!" : "Signed in successfully!");
+        // Close modal after a delay
+        setTimeout(() => {
+          onClose();
+        }, 1500);
+      } else {
+        setError(result.error || `Failed to ${isSignup ? 'create account' : 'sign in'}`);
+      }
+    } catch (error) {
+      setError(`Failed to ${isSignup ? 'create account' : 'sign in'}. Please try again.`);
+    }
+  };
+
+  return (
+    <div 
+      className="fixed inset-0 flex items-center justify-center p-4 z-50"
+      style={{ backgroundColor: "rgba(0, 0, 0, 0.4)" }}
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="text-center mb-6">
+          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            {isSignup ? (
+              <UserPlus size={32} className="text-blue-600" />
+            ) : (
+              <LogIn size={32} className="text-blue-600" />
+            )}
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900">
+            {isSignup ? 'Create Account' : 'Sign In'}
+          </h2>
+          <p className="text-gray-600 mt-2">
+            {isSignup 
+              ? 'Join RigArchitect and save your builds' 
+              : 'Welcome back to RigArchitect'
+            }
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Error Display */}
+          {error && (
+            <div className="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <AlertCircle size={18} className="text-red-600 flex-shrink-0" />
+              <span className="text-sm text-red-800">{error}</span>
+            </div>
+          )}
+
+          {/* Success Display */}
+          {success && (
+            <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+              <CheckCircle2 size={18} className="text-green-600 flex-shrink-0" />
+              <span className="text-sm text-green-800">{success}</span>
+            </div>
+          )}
+
+          {/* Name Field - Only for signup */}
+          {isSignup && (
+            <div>
+              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+                Name
+              </label>
+              <input
+                id="name"
+                name="name"
+                type="text"
+                required={isSignup}
+                value={formData.name}
+                onChange={handleInputChange}
+                className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                placeholder="Enter your name"
+                disabled={isLoading}
+              />
+            </div>
+          )}
+
+          {/* Email Field */}
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+              Email
+            </label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              required
+              value={formData.email}
+              onChange={handleInputChange}
+              className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+              placeholder="Enter your email"
+              disabled={isLoading}
+            />
+          </div>
+
+          {/* Password Field */}
+          <div>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+              Password
+            </label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              required
+              value={formData.password}
+              onChange={handleInputChange}
+              className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+              placeholder="Enter your password"
+              disabled={isLoading}
+            />
+            <p className="text-xs text-gray-500 mt-1">At least 6 characters</p>
+          </div>
+
+          {/* Budget Field - Only for signup */}
+          {isSignup && (
+            <div>
+              <label htmlFor="budget" className="block text-sm font-medium text-gray-700 mb-1">
+                Initial Budget ($)
+              </label>
+              <input
+                id="budget"
+                name="budget"
+                type="number"
+                min="100"
+                max="9999"
+                value={formData.budget}
+                onChange={handleInputChange}
+                className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                placeholder="5000"
+                disabled={isLoading}
+              />
+              <p className="text-xs text-gray-500 mt-1">Your PC building budget</p>
+            </div>
+          )}
+
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full flex justify-center items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isLoading ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                {isSignup ? 'Creating Account...' : 'Signing In...'}
+              </>
+            ) : (
+              <>
+                {isSignup ? (
+                  <>
+                    <UserPlus size={16} />
+                    Create Account
+                  </>
+                ) : (
+                  <>
+                    <LogIn size={16} />
+                    Sign In
+                  </>
+                )}
+              </>
+            )}
+          </button>
+
+          {/* Mode Switch */}
+          <div className="text-center pt-4">
+            <p className="text-sm text-gray-600">
+              {isSignup ? 'Already have an account?' : "Don't have an account?"}
+            </p>
+            <button
+              type="button"
+              onClick={() => setIsSignup(!isSignup)}
+              disabled={isLoading}
+              className="text-blue-600 hover:text-blue-700 font-medium text-sm mt-1 disabled:opacity-50"
+            >
+              {isSignup ? 'Sign In' : 'Create Account'}
+            </button>
+          </div>
+
+          {/* Cancel Button */}
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isLoading}
+              className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors text-sm disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

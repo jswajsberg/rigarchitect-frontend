@@ -16,6 +16,8 @@ import {
 } from "../api/user-controller/user-controller";
 import type { UserResponse } from "../api/model";
 import { authAPI, authService } from "../services/AuthService";
+import { guestService } from "../services/GuestService";
+import { migrateGuestData } from "../api/authentication/authentication";
 
 // Authentication types
 interface AuthUser extends UserResponse {
@@ -44,6 +46,7 @@ interface AuthContextType {
   // Current state
   user: AuthUser | null;
   isAuthenticated: boolean;
+  isGuest: boolean;
   isLoading: boolean;
 
   // Actions
@@ -58,6 +61,9 @@ interface AuthContextType {
   ) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
 
+  // Guest mode actions
+  initializeGuestMode: () => Promise<void>;
+  migrateGuestToUser: () => Promise<{ success: boolean; error?: string }>;
 
   // JWT authentication methods
   refreshToken?: () => Promise<boolean>;
@@ -75,6 +81,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Auth state
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [isGuest, setIsGuest] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   // Keep authUser budget in sync with backend data after purchases
@@ -122,14 +129,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // For now, just check if we have user data
         if (authData.user && authData.user.id) {
           setUser({ ...authData.user, isAuthenticated: true });
+          setIsGuest(false);
+          setIsLoading(false);
+          return;
         }
       }
+
+      // If no authenticated user, initialize guest mode
+      await initializeGuestMode();
     } catch (error) {
       console.error("Error initializing auth:", error);
       // Clear corrupted auth data
       localStorage.removeItem("rigarchitect_auth");
-    } finally {
-      setIsLoading(false);
+      // Fall back to guest mode
+      await initializeGuestMode();
     }
   };
 
@@ -150,6 +163,50 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     localStorage.removeItem("rigarchitect_access_token");
     localStorage.removeItem("rigarchitect_refresh_token");
     localStorage.removeItem("rigarchitect_token_expiry");
+  };
+
+  const initializeGuestMode = async () => {
+    try {
+      // Initialize guest session
+      await guestService.ensureValidSession();
+      setIsGuest(true);
+      setUser(null);
+    } catch (error) {
+      console.error("Error initializing guest mode:", error);
+      setIsGuest(true);
+      setUser(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const migrateGuestToUser = async (): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const sessionId = guestService.getSessionForMigration();
+      if (!sessionId) {
+        return {
+          success: false,
+          error: "No guest session found to migrate"
+        };
+      }
+
+      // Migrate guest data to user account
+      await migrateGuestData({
+        sessionId
+      });
+
+      // Clear guest session
+      guestService.clearSession();
+      setIsGuest(false);
+
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error migrating guest data:", error);
+      return {
+        success: false,
+        error: "Failed to migrate guest data"
+      };
+    }
   };
 
   const login = async (
@@ -174,7 +231,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         isAuthenticated: true,
       };
       setUser(authUser);
+      setIsGuest(false);
       saveAuthState(response.user);
+
+      // Migrate guest data if user was previously a guest
+      if (isGuest) {
+        await migrateGuestToUser();
+      }
 
       return { success: true };
     } catch (error: any) {
@@ -224,7 +287,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         isAuthenticated: true,
       };
       setUser(authUser);
+      setIsGuest(false);
       saveAuthState(response.user);
+
+      // Migrate guest data if user was previously a guest
+      if (isGuest) {
+        await migrateGuestToUser();
+      }
 
       return { success: true };
     } catch (error: any) {
@@ -283,12 +352,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
     setUser(null);
     clearAuthState();
 
     // Clear all cached data
     queryClient.clear();
+
+    // Reinitialize guest mode after logout
+    await initializeGuestMode();
 
     // Server-side token invalidation would occur here
   };
@@ -311,11 +383,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const contextValue: AuthContextType = {
     user,
     isAuthenticated: !!user?.isAuthenticated,
+    isGuest,
     isLoading: isLoading,
     login,
     signup,
     changePassword,
     logout,
+    // Guest mode methods
+    initializeGuestMode,
+    migrateGuestToUser,
     // JWT methods
     getAuthHeaders,
     refreshToken,
@@ -344,4 +420,18 @@ export const useAuthUser = () => {
 export const useIsAuthenticated = () => {
   const { isAuthenticated } = useAuth();
   return isAuthenticated;
+};
+
+export const useIsGuest = () => {
+  const { isGuest } = useAuth();
+  return isGuest;
+};
+
+export const useAuthMode = () => {
+  const { isAuthenticated, isGuest } = useAuth();
+  return {
+    isAuthenticated,
+    isGuest,
+    mode: isAuthenticated ? 'authenticated' : isGuest ? 'guest' : 'loading'
+  };
 };

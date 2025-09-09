@@ -3,7 +3,7 @@
  * @param {ComponentCardProps} props - Component props including component data and cart handlers
  * @returns {JSX.Element} Styled component card with conditional cart buttons
  */
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import type {
   ComponentCardProps,
   StockStatus,
@@ -32,6 +32,23 @@ const ComponentCard = ({
   showCartButtons = false,
 }: ComponentCardProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // Close expanded details when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (cardRef.current && !cardRef.current.contains(event.target as Node)) {
+        setIsExpanded(false);
+      }
+    };
+
+    if (isExpanded) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [isExpanded]);
 
   const formatPrice = (price?: number) => {
     return price ? `$${price.toFixed(2)}` : "Price not available";
@@ -235,7 +252,10 @@ const ComponentCard = ({
   const allDetails = getAllDetails();
 
   return (
-    <div className="bg-white border rounded-lg shadow hover:shadow-md transition-all duration-200 flex flex-col h-full">
+    <div 
+      ref={cardRef}
+      className="bg-white border rounded-lg shadow hover:shadow-md transition-all duration-200 flex flex-col h-full relative"
+    >
       {/* Card Header - Always Visible */}
       <div className="p-5 flex-1 flex flex-col">
         <div className="flex items-start justify-between mb-4">
@@ -333,12 +353,21 @@ const ComponentCard = ({
         </div>
       </div>
 
-      {/* Expanded Details */}
+      {/* Expanded Details - Positioned Absolutely */}
       {isExpanded && (
-        <div className="border-t bg-gray-50 p-5">
-          <h4 className="font-medium text-gray-900 mb-3">
-            Technical Specifications
-          </h4>
+        <div className="absolute top-full left-0 right-0 bg-white border rounded-lg shadow-xl z-20 p-5 max-h-96 overflow-y-auto">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="font-medium text-gray-900">
+              Technical Specifications
+            </h4>
+            <button
+              onClick={() => setIsExpanded(false)}
+              className="text-gray-400 hover:text-gray-600 p-1 rounded"
+              aria-label="Close details"
+            >
+              <ChevronUp size={16} />
+            </button>
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {allDetails.map((detail, index) => (

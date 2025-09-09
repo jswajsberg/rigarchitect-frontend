@@ -550,7 +550,7 @@ export function useGetUserByEmail<TData = Awaited<ReturnType<typeof getUserByEma
 
 
 /**
- * Get the currently active user (uses demo implementation)
+ * Get the currently active user (hardcoded for now, will be authenticated user later)
  * @summary Get current user
  */
 export const getCurrentUser = (
