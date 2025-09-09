@@ -1,4 +1,7 @@
-// src/pages/ComponentCatalog.tsx - Fixed version with proper prop handling
+/**
+ * Component catalog page with search, filtering, and cart operations
+ * @returns {JSX.Element} Component catalog with pagination and cart functionality
+ */
 import React, { useState, useMemo } from "react";
 import { useSelectedUserId } from "../contexts/UserContext";
 import { useQueryClient } from "@tanstack/react-query";
@@ -129,7 +132,7 @@ const ComponentCatalog: React.FC = () => {
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(0);
-  const [pageSize] = useState(12); // Fixed page size
+  const [pageSize] = useState(12);
   const [usePagination, setUsePagination] = useState(true);
 
   // Component types with associated icons - centralized for consistency
@@ -334,7 +337,7 @@ const ComponentCatalog: React.FC = () => {
           component.name,
           component.brand,
           component.type,
-          component.compatibilityTag, // Fixed: using compatibilityTag instead of compatibilityTags
+          component.compatibilityTag,
         ]
           .filter(Boolean)
           .join(" ")
@@ -358,7 +361,7 @@ const ComponentCatalog: React.FC = () => {
         (c) =>
           c.compatibilityTag
             ?.toLowerCase()
-            .includes(filters.compatibilityTag.toLowerCase()) // Fixed: using single compatibilityTag
+            .includes(filters.compatibilityTag.toLowerCase())
       );
     }
     if (filters.maxPrice) {
@@ -533,7 +536,7 @@ const ComponentCatalog: React.FC = () => {
       }
     }
 
-    // If replacements needed, show replacement modal for first conflict
+    // Show replacement modal if component conflicts exist
     if (buildsNeedingReplacement.length > 0) {
       const firstConflict = buildsNeedingReplacement[0];
       setReplacementModal({
@@ -622,7 +625,7 @@ const ComponentCatalog: React.FC = () => {
     }
 
     try {
-      // First, find and remove the existing component
+      // Find and remove the existing component
       const buildItemsResponse = await queryClient.fetchQuery({
         queryKey: [`/api/v1/items/cart/${replacementModal.buildId}`],
         queryFn: () => getItemsByCart(replacementModal.buildId!),

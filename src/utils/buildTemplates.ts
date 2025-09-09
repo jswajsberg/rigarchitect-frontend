@@ -1,4 +1,7 @@
-// src/utils/buildTemplates.ts - Cleaned up and fixed template system
+/**
+ * Build template system for automated PC configuration and component selection
+ * @module BuildTemplates
+ */
 import type { ComponentResponse } from "../api/model";
 import type { BuildSlots } from "./compatibilityChecker";
 
@@ -326,6 +329,9 @@ export interface MissingComponentInfo {
 
 /**
  * Apply build template with improved selection logic
+ * @param {BuildTemplate} template - Build template configuration
+ * @param {ComponentResponse[] | { data: ComponentResponse[] }} availableComponents - Available components to select from
+ * @returns {Object} Suggested build result with pricing and compatibility info
  */
 export function applyBuildTemplate(
   template: BuildTemplate,
@@ -470,6 +476,13 @@ export function applyBuildTemplate(
 
 /**
  * Improved component selection with better logic
+ * @param {ComponentResponse[]} components - Available components
+ * @param {keyof BuildSlots} componentType - Type of component to select
+ * @param {ComponentPreference} preference - Selection preferences
+ * @param {BuildTemplate} template - Build template for priority guidance
+ * @param {BuildSlots} currentBuild - Current build state for compatibility
+ * @param {number} remainingBudget - Available budget
+ * @returns {ComponentResponse | null} Selected component or null if none suitable
  */
 function selectBestComponent(
   components: ComponentResponse[],
@@ -563,6 +576,10 @@ function selectBestComponent(
 
 /**
  * Basic compatibility check - only the most essential checks
+ * @param {ComponentResponse} component - Component to check
+ * @param {keyof BuildSlots} componentType - Type of component
+ * @param {BuildSlots} currentBuild - Current build for compatibility context
+ * @returns {boolean} True if basically compatible
  */
 function isBasicCompatible(
   component: ComponentResponse,
@@ -589,6 +606,10 @@ function isBasicCompatible(
 
 /**
  * Check if component meets minimum specifications
+ * @param {ComponentResponse} component - Component to validate
+ * @param {keyof BuildSlots} componentType - Type of component
+ * @param {ComponentPreference} preference - Minimum spec requirements
+ * @returns {boolean} True if meets specifications
  */
 function meetsMinimumSpecs(
   component: ComponentResponse,
@@ -642,6 +663,8 @@ function meetsMinimumSpecs(
 
 /**
  * Get build template by ID
+ * @param {string} templateId - Template identifier
+ * @returns {BuildTemplate | undefined} Template if found
  */
 export function getBuildTemplate(
   templateId: string
@@ -651,6 +674,8 @@ export function getBuildTemplate(
 
 /**
  * Filter templates by budget range
+ * @param {number} maxBudget - Maximum budget constraint
+ * @returns {BuildTemplate[]} Templates within budget
  */
 export function getTemplatesByBudget(maxBudget: number): BuildTemplate[] {
   return BUILD_TEMPLATES.filter(
@@ -662,6 +687,8 @@ export function getTemplatesByBudget(maxBudget: number): BuildTemplate[] {
 
 /**
  * Get recommended template based on use case
+ * @param {string[]} useCase - User's intended use cases
+ * @returns {BuildTemplate | undefined} Best matching template
  */
 export function getRecommendedTemplate(
   useCase: string[]
@@ -691,6 +718,8 @@ export function getRecommendedTemplate(
 
 /**
  * Validate template configuration
+ * @param {BuildTemplate} template - Template to validate
+ * @returns {string[]} Array of validation errors
  */
 export function validateTemplate(template: BuildTemplate): string[] {
   const errors: string[] = [];

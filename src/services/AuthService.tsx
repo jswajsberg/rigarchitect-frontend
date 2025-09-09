@@ -1,21 +1,16 @@
-// src/services/AuthService.tsx - Future JWT integration utilities
+/**
+ * Authentication service for JWT token management and API integration
+ * @module AuthService
+ */
 import axios from "axios";
 
-// Future JWT token structure
+// JWT token structure
 interface JWTTokens {
   accessToken: string;
   refreshToken: string;
   expiresAt: number;
 }
 
-// Future authentication endpoints (to be implemented on backend)
-// interface AuthEndpoints {
-//   LOGIN: "/api/v1/auth/login";
-//   SIGNUP: "/api/v1/auth/signup";
-//   REFRESH: "/api/v1/auth/refresh";
-//   LOGOUT: "/api/v1/auth/logout";
-//   VERIFY: "/api/v1/auth/verify";
-// }
 
 // Storage keys for JWT tokens
 const STORAGE_KEYS = {
@@ -49,10 +44,10 @@ class AuthService {
 
   /**
    * Store JWT tokens securely
-   * Future: Use httpOnly cookies instead of localStorage
+   * Uses localStorage for development, production should use httpOnly cookies
    */
   setTokens(tokens: JWTTokens): void {
-    // Development storage (replace with secure httpOnly cookies)
+    // Uses localStorage for development
     if (typeof window !== "undefined") {
       localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, tokens.accessToken);
       localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, tokens.refreshToken);
@@ -65,7 +60,6 @@ class AuthService {
 
   /**
    * Retrieve stored access token
-   * Future: Get from httpOnly cookie
    */
   getAccessToken(): string | null {
     if (typeof window !== "undefined") {
@@ -76,7 +70,6 @@ class AuthService {
 
   /**
    * Retrieve stored refresh token
-   * Future: Get from secure httpOnly cookie
    */
   getRefreshToken(): string | null {
     if (typeof window !== "undefined") {
@@ -187,7 +180,7 @@ class AuthService {
   private handleAuthFailure(): void {
     this.clearAuth();
 
-    // Future: Dispatch auth failure event for global handling
+    // Dispatch auth failure event for global handling
     window.dispatchEvent(new CustomEvent("auth:failure"));
   }
 

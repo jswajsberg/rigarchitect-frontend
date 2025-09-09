@@ -1,4 +1,7 @@
-// src/pages/PCBuilder/index.tsx
+/**
+ * PC Builder page with templates, compatibility checking, and auto-save
+ * @returns {JSX.Element} Full PC builder interface with component slots and suggestions
+ */
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { useSelectedUserId } from "../../contexts/UserContext";
 import { useNavigation } from "../../contexts/NavigationContext";
@@ -211,10 +214,7 @@ const PCBuilder: React.FC = () => {
     console.log("Starting auto-save...");
 
     try {
-      // Use the build name (should already be set by now)
-      // const buildNameToUse = buildName.trim(); // Removed unused variable
-
-      // Skip auto-save if no build is selected (build creation should happen through handleBuildNameConfirm)
+      // Skip auto-save if no existing build is selected
       if (!selectedBuildId || !isModifyingExisting) {
         console.log("Auto-save skipped: no existing build to save to");
         return;
@@ -225,7 +225,7 @@ const PCBuilder: React.FC = () => {
       await handleSaveBuild(true); // Pass true for silent save
       setLastSaved(new Date());
       lastOperationRef.current = { type: 'save', timestamp: Date.now() };
-      // Note: setHasUnsavedChanges(false) is now handled in useBuildOperations hook
+      // Unsaved changes flag is managed by the build operations hook
       console.log("Auto-save completed successfully");
     } catch (error) {
       console.error("Auto-save failed:", error);
@@ -246,18 +246,6 @@ const PCBuilder: React.FC = () => {
     setIsModifyingExisting,
   ]);
 
-  // Debounced auto-save - commented out to remove unused variable warning
-  // const debouncedAutoSave = useCallback(() => {
-  //   console.log("Debounced auto-save triggered");
-  //   if (autoSaveTimeoutRef.current) {
-  //     clearTimeout(autoSaveTimeoutRef.current);
-  //   }
-
-  //   autoSaveTimeoutRef.current = setTimeout(() => {
-  //     console.log("Auto-save timeout reached, executing auto-save");
-  //     autoSave();
-  //   }, 3000); // Auto-save after 3 seconds of inactivity
-  // }, [autoSave]);
 
   // Auto-save on page unload (prevents data loss)
   useEffect(() => {
@@ -456,9 +444,9 @@ const PCBuilder: React.FC = () => {
     }
   }, [selectedUserId, savedBuilds.length]);
 
-  // Load components when build is selected (COMPLETELY DISABLED when using templates)
+  // Load components when build is selected (template operations are excluded)
   useEffect(() => {
-    // Skip entirely if using template - templates manage their own state
+    // Template operations manage their own state independently
     if (isUsingTemplate) {
       return;
     }
@@ -661,7 +649,7 @@ const PCBuilder: React.FC = () => {
         return;
       }
 
-      // Create completely new build object with proper array handling
+      // Create new build object with proper array handling
       const cleanBuild: BuildSlots = {
         CPU: suggestedBuild.CPU || undefined,
         GPU: suggestedBuild.GPU || undefined,
@@ -726,7 +714,7 @@ const PCBuilder: React.FC = () => {
     ]
   );
 
-  // Generation-based template application - completely race condition free
+  // Generation-based template application with race condition prevention
   const handleApplyTemplate = useCallback(
     (templateId: string) => {
       // Cancel any pending template application
@@ -857,7 +845,7 @@ const PCBuilder: React.FC = () => {
                     try {
                       await handleSaveBuild();
                       lastOperationRef.current = { type: 'save', timestamp: Date.now() };
-                      // Note: setHasUnsavedChanges(false) is now handled in useBuildOperations hook
+                      // Unsaved changes flag is managed by the build operations hook
                     } catch (error) {
                       console.error("Save failed:", error);
                     }

@@ -1,4 +1,7 @@
-// src/contexts/BuilderContext.tsx
+/**
+ * Builder context for managing PC build state and configurations
+ * @module BuilderContext
+ */
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useAuth } from "./AuthContext";
 import type { BuildSlots } from "../utils/compatibilityChecker";

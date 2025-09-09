@@ -1,4 +1,7 @@
-// src/pages/OrderHistory.tsx - Enhanced with colorized Lucide icons and consistent design
+/**
+ * Order history page displaying completed purchases with receipts
+ * @returns {JSX.Element} Order history with expandable order details and print functionality
+ */
 import { useState, useMemo } from "react";
 import { useSelectedUserId } from "../contexts/UserContext";
 import { useNavigation } from "../contexts/NavigationContext";

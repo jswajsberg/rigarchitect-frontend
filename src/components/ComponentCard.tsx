@@ -1,4 +1,8 @@
-// src/components/ComponentCard.tsx - Enhanced with Lucide React icons
+/**
+ * Displays a component with expandable details and cart actions
+ * @param {ComponentCardProps} props - Component props including component data and cart handlers
+ * @returns {JSX.Element} Styled component card with conditional cart buttons
+ */
 import { useState } from "react";
 import type {
   ComponentCardProps,

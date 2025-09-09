@@ -1,4 +1,8 @@
-// src/components/PCBuilder/hooks/useBuildOperations.tsx
+/**
+ * Hook for managing PC builder operations like save, load, delete, and add to cart
+ * @param {UseBuildOperationsProps} props - Configuration and mutation objects
+ * @returns {Object} Build operation handlers and modal states
+ */
 import { useCallback, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCart } from "../../../contexts/CartContext";
@@ -52,7 +56,6 @@ export const useBuildOperations = ({
     setSelectedBuildId,
     currentBuild,
     setCurrentBuild,
-    // priceRange, // Unused in this hook
     setPriceRange,
     buildName,
     setBuildName,
@@ -314,7 +317,6 @@ export const useBuildOperations = ({
 
   // Execute clear after confirmation
   const handleClearConfirmed = useCallback(async () => {
-    // const componentCount = Object.keys(currentBuild).length; // Unused
     const isSavedBuild = selectedBuildId && isModifyingExisting;
 
     try {
@@ -423,7 +425,7 @@ export const useBuildOperations = ({
           queryKey: [`/api/v1/carts/user/${selectedUserId}`],
         });
 
-        // Don't show popup for new build creation - it will be auto-saved
+        // New builds are auto-saved without user notification
       } catch (error: any) {
         console.error("Failed to create new build:", error);
         setModalMessage({

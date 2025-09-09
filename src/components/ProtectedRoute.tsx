@@ -1,4 +1,8 @@
-// src/components/ProtectedRoute.tsx
+/**
+ * Authentication wrapper component for protected routes
+ * @param {ProtectedRouteProps} props - Children to protect and optional fallback component
+ * @returns {JSX.Element} Protected content, loading state, or login page
+ */
 import React from "react";
 import { useAuth } from "../contexts/AuthContext";
 import Login from "../pages/Login";
@@ -8,11 +12,6 @@ interface ProtectedRouteProps {
   fallback?: React.ReactNode;
 }
 
-/**
- * Wraps components that require authentication.
- * Redirects to login if user is not authenticated.
- * Shows loading spinner while checking authentication status.
- */
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   children,
   fallback,

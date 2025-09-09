@@ -1,4 +1,6 @@
-// src/modals/QuantityModal.tsx
+/**
+ * Quantity selection modal for adding components to cart or build with stock validation
+ */
 import React, { useState } from "react";
 import type { ComponentResponse } from "../api/model";
 
@@ -10,6 +12,11 @@ interface QuantityModalProps {
   actionType: "build" | "buy";
 }
 
+/**
+ * Modal for selecting quantity when adding components to cart or build
+ * @param {QuantityModalProps} props - Modal props with component data and handlers
+ * @returns {JSX.Element | null} Quantity selection modal or null if closed
+ */
 const QuantityModal: React.FC<QuantityModalProps> = ({
   component,
   isOpen,

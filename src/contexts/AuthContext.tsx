@@ -1,5 +1,8 @@
+/**
+ * Authentication context providing login, signup, and user session management
+ * @module AuthContext
+ */
 /* eslint-disable react-refresh/only-export-components */
-// src/contexts/AuthContext.tsx
 import React, {
   createContext,
   useContext,
@@ -16,7 +19,7 @@ import { authAPI, authService } from "../services/AuthService";
 
 // Authentication types
 interface AuthUser extends UserResponse {
-  // Future: can add JWT tokens, roles, permissions here
+  // Authentication state can be extended with roles and permissions
   isAuthenticated: true;
 }
 
@@ -56,7 +59,7 @@ interface AuthContextType {
   logout: () => void;
 
 
-  // Future JWT methods (placeholders for easy integration)
+  // JWT authentication methods
   refreshToken?: () => Promise<boolean>;
   getAuthHeaders?: () => Record<string, string>;
 }
@@ -115,7 +118,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (storedAuth) {
         const authData = JSON.parse(storedAuth);
 
-        // Future: Validate JWT token here
+        // JWT token validation would be performed here
         // For now, just check if we have user data
         if (authData.user && authData.user.id) {
           setUser({ ...authData.user, isAuthenticated: true });
@@ -132,10 +135,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const saveAuthState = (userData: UserResponse) => {
     // For now, save user data to localStorage
-    // Future: Save JWT tokens here instead
+    // JWT tokens would be saved here in a production system
     const authData = {
       user: userData,
-      // Future: add tokens, expiry, etc.
+      // Additional token data would be included here
       timestamp: Date.now(),
     };
     localStorage.setItem("rigarchitect_auth", JSON.stringify(authData));
@@ -287,13 +290,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Clear all cached data
     queryClient.clear();
 
-    // Future: Invalidate JWT tokens on server
+    // Server-side token invalidation would occur here
   };
 
 
-  // Future JWT utility methods (placeholders)
+  // JWT utility methods
   const getAuthHeaders = (): Record<string, string> => {
-    // Future: Return JWT token in Authorization header
+    // JWT token would be included in Authorization header
     return {
       // 'Authorization': `Bearer ${jwtToken}`,
       "Content-Type": "application/json",
@@ -301,7 +304,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const refreshToken = async (): Promise<boolean> => {
-    // Future: Refresh JWT token logic
+    // JWT token refresh logic would be implemented here
     return true;
   };
 

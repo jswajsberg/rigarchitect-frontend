@@ -1,5 +1,8 @@
+/**
+ * Navigation context for managing active tab state with persistence
+ * @module NavigationContext
+ */
 /* eslint-disable react-refresh/only-export-components */
-// src/contexts/NavigationContext.tsx - Enhanced with tab persistence
 import {
   createContext,
   useContext,
@@ -71,7 +74,7 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({
     }
   };
 
-  // Cleanup effect for potential future storage management
+  // Cleanup effect for storage management
   useEffect(() => {
     // Validate stored tab on mount in case invalid data was manually set
     if (typeof window !== "undefined") {

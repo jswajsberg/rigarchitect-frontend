@@ -1,4 +1,6 @@
-// src/modals/ConfirmModal.tsx
+/**
+ * Reusable confirmation modal with customizable styling and keyboard navigation
+ */
 import React, { useEffect } from "react";
 import { AlertTriangle, Trash2, Save, X } from "lucide-react";
 
@@ -14,6 +16,11 @@ interface ConfirmModalProps {
   icon?: React.ReactNode;
 }
 
+/**
+ * Confirmation modal with variant styling and keyboard support
+ * @param {ConfirmModalProps} props - Modal props with title, message, and action handlers
+ * @returns {JSX.Element | null} Confirmation modal or null if closed
+ */
 const ConfirmModal: React.FC<ConfirmModalProps> = ({
   isOpen,
   onClose,

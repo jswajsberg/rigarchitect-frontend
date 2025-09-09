@@ -1,3 +1,6 @@
+/**
+ * Comprehensive checkout modal with tax calculations, budget validation, and order completion
+ */
 import { useState, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSelectedUserId, useSelectedUser } from "../contexts/UserContext";
@@ -18,6 +21,11 @@ interface CheckoutModalProps {
   cart: BuildCartResponse;
 }
 
+/**
+ * Modal for cart checkout with tax calculations, budget validation, and order processing
+ * @param {CheckoutModalProps} props - Modal props with cart data and handlers
+ * @returns {JSX.Element | null} Checkout modal or null if closed
+ */
 const CheckoutModal = ({ isOpen, onClose, cart }: CheckoutModalProps) => {
   const queryClient = useQueryClient();
   const selectedUserId = useSelectedUserId();

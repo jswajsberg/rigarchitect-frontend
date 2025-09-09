@@ -1,4 +1,6 @@
-// src/modals/BuildSelectionModal.tsx
+/**
+ * Modal for selecting multiple builds to add a component to with quantity control
+ */
 import React, { useState } from "react";
 import type { ComponentResponse, BuildCartResponse } from "../api/model";
 
@@ -11,6 +13,11 @@ interface BuildSelectionModalProps {
   isLoading?: boolean;
 }
 
+/**
+ * Modal for selecting builds to add a component to with multi-selection and quantity control
+ * @param {BuildSelectionModalProps} props - Modal props with component data and build list
+ * @returns {JSX.Element | null} Build selection modal or null if closed
+ */
 const BuildSelectionModal: React.FC<BuildSelectionModalProps> = ({
   component,
   isOpen,

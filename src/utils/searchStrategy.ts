@@ -1,4 +1,7 @@
-// src/utils/searchStrategy.ts
+/**
+ * Search strategy determination for component catalog with advanced filtering support
+ * @module SearchStrategy
+ */
 import {
   expandSlangTerm,
   findComponentTypeFromSlang,
@@ -14,6 +17,14 @@ export interface SearchStrategy {
   originalTerm?: string;
 }
 
+/**
+ * Determine optimal search strategy based on input term and filter state
+ * @param {string} searchTerm - User search input
+ * @param {boolean} showAdvancedSearch - Whether advanced search is active
+ * @param {SearchFilters} filters - Current filter selections
+ * @param {Array<{ id: string; name: string }>} componentTypes - Available component types
+ * @returns {SearchStrategy | null} Search strategy configuration or null if no search needed
+ */
 export function determineSearchStrategy(
   searchTerm: string,
   showAdvancedSearch: boolean,

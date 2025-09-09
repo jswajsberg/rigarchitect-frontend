@@ -1,4 +1,8 @@
-// src/components/SearchBar.tsx
+/**
+ * Search bar with filters for component catalog
+ * @param {SearchBarProps} props - Search term, filters, and callback functions
+ * @returns {JSX.Element} Search bar with expandable filters and smart search hints
+ */
 
 export interface SearchFilters {
   type: string;
