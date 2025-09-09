@@ -13,6 +13,7 @@ import {
 } from "../../api/build-cart-controller/build-cart-controller";
 import { useGetItemsByCart } from "../../api/cart-item-controller/cart-item-controller";
 import { useAuth } from "../../contexts/AuthContext";
+import { useGuestCart } from "../../services/GuestCartService";
 import type { ComponentResponse, CartItemResponse } from "../../api/model";
 import {
   checkBuildCompatibility,
@@ -48,13 +49,20 @@ import {
   ChevronRight,
 } from "lucide-react";
 
-const PCBuilder: React.FC = () => {
+interface PCBuilderProps {
+  openAuthModal?: (mode?: "login" | "signup") => void;
+}
+
+const PCBuilder: React.FC<PCBuilderProps> = ({ openAuthModal }) => {
   const selectedUserId = useSelectedUserId();
   const { activeTab } = useNavigation();
   const { data: allComponents } = useGetAllComponents();
   const createItemMutation = useCreateItem();
   const createCartMutation = useCreateCartForUser();
-  const { user: authUser } = useAuth();
+  const { user: authUser, isGuest, isAuthenticated } = useAuth();
+  
+  // Guest cart functionality
+  const guestCart = useGuestCart();
 
   // === Persistent builder state (from BuilderContext) ===
   const {
@@ -83,6 +91,7 @@ const PCBuilder: React.FC = () => {
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showGuestSignupPrompt, setShowGuestSignupPrompt] = useState(false);
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const autoSaveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const templateTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
@@ -94,21 +103,27 @@ const PCBuilder: React.FC = () => {
   const componentSnapshotRef = React.useRef<ComponentResponse[] | null>(null);
   const [componentSnapshotTimestamp, setComponentSnapshotTimestamp] = useState<number | null>(null);
 
-  // Get saved builds (ACTIVE status)
+  // Get saved builds (ACTIVE status) - conditional based on auth state
   const { data: userCarts } = useGetUserCarts(selectedUserId || 0, {
-    query: { enabled: !!selectedUserId },
+    query: { enabled: !!selectedUserId && isAuthenticated },
   });
 
-  const savedBuilds = useMemo(
-    () => userCarts?.data?.filter((cart) => cart.status === "ACTIVE") || [],
-    [userCarts]
-  );
+  const savedBuilds = useMemo(() => {
+    if (isGuest) {
+      // For guests, we don't have saved builds yet - could be enhanced later
+      return [];
+    }
+    return userCarts?.data?.filter((cart) => cart.status === "ACTIVE") || [];
+  }, [userCarts, isGuest]);
 
   const { data: selectedBuildItems } = useGetItemsByCart(selectedBuildId || 0, {
-    query: { enabled: !!selectedBuildId },
+    query: { enabled: !!selectedBuildId && isAuthenticated },
   });
 
   const components = allComponents?.data || [];
+  
+  // Debug: Check if currentBuild has components when component loads
+  console.log('DEBUG PCBuilder - currentBuild state:', currentBuild, 'keys:', Object.keys(currentBuild));
 
   // Create or maintain component snapshot for consistent template application
   const getComponentSnapshot = useCallback(() => {
@@ -145,17 +160,23 @@ const PCBuilder: React.FC = () => {
   }, []);
 
   // Use the extracted build operations hook
+  const buildOps = useBuildOperations({
+    selectedBuildItems,
+    createItemMutation,
+    setHasUnsavedChanges,
+    lastOperationRef,
+  });
+
+  // Guest-specific handlers for save and add to cart
+
+  // Use guest handlers when in guest mode, otherwise use authenticated handlers
   const {
-    handleSaveBuild,
     handleLoadBuild,
     handleDeleteBuild,
     handleDeleteConfirmed,
     handleClearBuild: originalHandleClearBuild,
     handleClearConfirmed,
     handleBuildNameConfirm,
-    handleAddToCart,
-    
-    // Modal states
     showDeleteConfirm,
     setShowDeleteConfirm,
     showClearConfirm,
@@ -168,18 +189,26 @@ const PCBuilder: React.FC = () => {
     modalMessage,
     clearConfirmMessage,
     setClearConfirmMessage,
-  } = useBuildOperations({
-    selectedBuildItems,
-    createItemMutation,
-    setHasUnsavedChanges,
-    lastOperationRef,
-  });
+  } = buildOps;
+
+
+  // Create a ref for the save function to avoid initialization issues
+  const handleSaveBuildRef = React.useRef<((silent?: boolean) => Promise<void>) | null>(null);
 
   // Auto-save functionality
   const autoSave = useCallback(async () => {
 
-    if (!selectedUserId || Object.keys(currentBuild).length === 0) {
-      return; // Don't auto-save if no user or no components
+    if (Object.keys(currentBuild).length === 0) {
+      return; // Don't auto-save if no components
+    }
+
+    // Skip auto-save for guests (they can manually save)
+    if (isGuest) {
+      return;
+    }
+
+    if (!selectedUserId) {
+      return; // Don't auto-save if no authenticated user
     }
 
     // Generate a name if we don't have one, but only if we have components
@@ -205,10 +234,12 @@ const PCBuilder: React.FC = () => {
         return;
       }
 
-      // Save the build silently (this will handle updating existing builds)
-      await handleSaveBuild(true); // Pass true for silent save
-      setLastSaved(new Date());
-      lastOperationRef.current = { type: 'save', timestamp: Date.now() };
+      // Save the build silently using ref to avoid dependency issues
+      if (handleSaveBuildRef.current) {
+        await handleSaveBuildRef.current(true); // Pass true for silent save
+        setLastSaved(new Date());
+        lastOperationRef.current = { type: 'save', timestamp: Date.now() };
+      }
       // Unsaved changes flag is managed by the build operations hook
     } catch (error) {
       console.error("Auto-save failed:", error);
@@ -223,7 +254,6 @@ const PCBuilder: React.FC = () => {
     selectedBuildId,
     isModifyingExisting,
     createCartMutation,
-    handleSaveBuild,
     setBuildName,
     setSelectedBuildId,
     setIsModifyingExisting,
@@ -279,6 +309,37 @@ const PCBuilder: React.FC = () => {
     // Update ref for next render
     previousTab.current = activeTab;
   }, [activeTab, hasUnsavedChanges, selectedBuildId, isModifyingExisting, autoSave]);
+
+  // Warn guests about losing their build when refreshing or leaving
+  useEffect(() => {
+    if (!isGuest) return;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (Object.keys(currentBuild).length > 0) {
+        const message = "You have an unsaved build. Create an account to save your progress!";
+        event.returnValue = message;
+        return message;
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden && Object.keys(currentBuild).length > 0) {
+        // Optional: Save to localStorage as backup when page becomes hidden
+        localStorage.setItem('rigarchitect_guest_backup_build', JSON.stringify({
+          build: currentBuild,
+          timestamp: Date.now()
+        }));
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isGuest, currentBuild]);
 
 
   // Mark build as having unsaved changes when components change
@@ -415,11 +476,11 @@ const PCBuilder: React.FC = () => {
 
   // Reset auto-selection flag when user changes or when no builds are available
   useEffect(() => {
-    if (!selectedUserId || savedBuilds.length === 0) {
+    if ((!selectedUserId && !isGuest) || savedBuilds.length === 0) {
       setHasAutoSelected(false);
       setUserExplicitlyCleared(false);
     }
-  }, [selectedUserId, savedBuilds.length]);
+  }, [selectedUserId, isGuest, savedBuilds.length]);
 
   // Load components when build is selected (template operations are excluded)
   useEffect(() => {
@@ -522,6 +583,58 @@ const PCBuilder: React.FC = () => {
 
     return result;
   }, [currentBuild, components, priceRange]);
+
+  // Guest mode handlers (defined after totalPrice calculation)
+  const handleGuestSaveBuild = useCallback(async () => {
+    try {
+      setIsAutoSaving(true);
+      const buildData = {
+        name: buildName || 'My PC Build',
+        components: Object.values(currentBuild).flat().filter(Boolean),
+        totalPrice: totalPrice,
+        createdFrom: 'pcbuilder',
+        createdAt: new Date()
+      };
+
+      await guestCart.saveAsBuild(buildData.name);
+      
+      setLastSaved(new Date());
+      setHasUnsavedChanges(false);
+      setShowSaveSuccess(true);
+    } catch (error) {
+      console.error('Error saving guest build:', error);
+      setShowError(true);
+    } finally {
+      setIsAutoSaving(false);
+    }
+  }, [buildName, currentBuild, totalPrice, guestCart]);
+
+  const handleGuestAddToCart = useCallback(async () => {
+    try {
+      // Add all components from current build to guest cart
+      const components = Object.values(currentBuild).flat().filter(Boolean);
+      
+      for (const component of components) {
+        guestCart.addItem(component as ComponentResponse, 1);
+      }
+
+      setShowSaveSuccess(true);
+    } catch (error) {
+      console.error('Error adding to guest cart:', error);
+      setShowError(true);
+    }
+  }, [currentBuild, guestCart]);
+
+  // Handler assignments using useMemo to avoid hoisting issues
+  const handleSaveBuild = useMemo(() => {
+    const saveFn = isGuest ? handleGuestSaveBuild : buildOps.handleSaveBuild;
+    handleSaveBuildRef.current = saveFn; // Update ref for autoSave
+    return saveFn;
+  }, [isGuest, handleGuestSaveBuild, buildOps.handleSaveBuild]);
+  
+  const handleAddToCart = useMemo(() => {
+    return isGuest ? handleGuestAddToCart : buildOps.handleAddToCart;
+  }, [isGuest, handleGuestAddToCart, buildOps.handleAddToCart]);
 
   // Component selection handlers
   const handleSelectComponent = useCallback(
@@ -756,7 +869,7 @@ const PCBuilder: React.FC = () => {
     [savedBuilds, handleLoadBuild]
   );
 
-  if (!selectedUserId) {
+  if (!selectedUserId && !isGuest) {
     return (
       <div className="p-6">
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
@@ -776,94 +889,113 @@ const PCBuilder: React.FC = () => {
             <div>
               <h1 className="text-3xl font-bold mb-2">PC Builder</h1>
               <p className="text-gray-600">
-                Create new builds, load existing ones, or apply templates
+                {isGuest 
+                  ? "Build your perfect PC - create an account to save your progress" 
+                  : "Create new builds, load existing ones, or apply templates"
+                }
               </p>
             </div>
 
-            {/* Build Actions */}
-            <div className="flex gap-3">
-              <button
-                onClick={handleNewBuild}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
-              >
-                + New Build
-              </button>
-              {Object.keys(currentBuild).length > 0 && (
+            {/* Build Actions - Hidden for guests */}
+            {!isGuest && (
+              <div className="flex gap-3">
                 <button
-                  onClick={async () => {
-                    try {
-                      await handleSaveBuild();
-                      lastOperationRef.current = { type: 'save', timestamp: Date.now() };
-                      // Unsaved changes flag is managed by the build operations hook
-                    } catch (error) {
-                      console.error("Save failed:", error);
-                    }
-                  }}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                    hasUnsavedChanges 
-                      ? "bg-orange-600 hover:bg-orange-700 text-white" 
-                      : "bg-green-600 hover:bg-green-700 text-white"
-                  }`}
+                  onClick={handleNewBuild}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
                 >
-                  {hasUnsavedChanges ? "● " : ""}{isModifyingExisting ? "Update Build" : "Save Build"}
+                  + New Build
                 </button>
-              )}
-            </div>
+                {Object.keys(currentBuild).length > 0 && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        await handleSaveBuild();
+                        lastOperationRef.current = { type: 'save', timestamp: Date.now() };
+                        // Unsaved changes flag is managed by the build operations hook
+                      } catch (error) {
+                        console.error("Save failed:", error);
+                      }
+                    }}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      hasUnsavedChanges 
+                        ? "bg-orange-600 hover:bg-orange-700 text-white" 
+                        : "bg-green-600 hover:bg-green-700 text-white"
+                    }`}
+                  >
+                    {hasUnsavedChanges ? "● " : ""}{isModifyingExisting ? "Update Build" : "Save Build"}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Guest Save Action */}
+            {isGuest && Object.keys(currentBuild).length > 0 && (
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowGuestSignupPrompt(true)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                >
+                  💾 Save Build
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* Build Loader with Enhanced Selection Display */}
-          <div className="bg-white rounded-lg shadow-sm border p-4 mb-4">
-            <div className="flex items-center gap-4 flex-wrap">
-              <label className="text-sm font-medium text-gray-700">
-                {savedBuilds.length > 0
-                  ? "Select Build:"
-                  : "No saved builds available"}
-              </label>
+          {/* Build Loader with Enhanced Selection Display - Hidden for guests */}
+          {!isGuest && (
+            <div className="bg-white rounded-lg shadow-sm border p-4 mb-4">
+              <div className="flex items-center gap-4 flex-wrap">
+                <label className="text-sm font-medium text-gray-700">
+                  {savedBuilds.length > 0
+                    ? "Select Build:"
+                    : "No saved builds available"}
+                </label>
 
-              {savedBuilds.length > 0 ? (
-                <div className="flex gap-2 flex-wrap">
-                  {savedBuilds.map((build) => (
-                    <div key={build.id} className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleEnhancedLoadBuild(build.id!)}
-                        className={`px-3 py-2 rounded-lg font-medium transition-colors ${
-                          selectedBuildId === build.id
-                            ? "bg-blue-600 text-white shadow-sm"
-                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                        }`}
-                      >
-                        {String(build.name || "Untitled Build").trim()}
-                        {build.totalPrice ? (
-                          <span className="ml-2 text-xs opacity-75">
-                            ${build.totalPrice.toFixed(0)}
-                          </span>
-                        ) : null}
-                      </button>
-
-                      {selectedBuildId === build.id && (
+                {savedBuilds.length > 0 ? (
+                  <div className="flex gap-2 flex-wrap">
+                    {savedBuilds.map((build) => (
+                      <div key={build.id} className="flex items-center gap-2">
                         <button
-                          onClick={() =>
-                            handleDeleteBuild(
-                              build.id!,
-                              build.name || "Untitled Build"
-                            )
-                          }
-                          className="text-red-500 hover:text-red-700 p-1 rounded"
-                          title="Delete Build"
+                          onClick={() => handleEnhancedLoadBuild(build.id!)}
+                          className={`px-3 py-2 rounded-lg font-medium transition-colors ${
+                            selectedBuildId === build.id
+                              ? "bg-blue-600 text-white shadow-sm"
+                              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                          }`}
                         >
-                          🗑️
+                          {String(build.name || "Untitled Build").trim()}
+                          {build.totalPrice ? (
+                            <span className="ml-2 text-xs opacity-75">
+                              ${build.totalPrice.toFixed(0)}
+                            </span>
+                          ) : null}
                         </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-sm text-gray-500 italic">
-                  Create your first build using the "+ New Build" button
-                </div>
-              )}
+
+                        {selectedBuildId === build.id && (
+                          <button
+                            onClick={() =>
+                              handleDeleteBuild(
+                                build.id!,
+                                build.name || "Untitled Build"
+                              )
+                            }
+                            className="text-red-500 hover:text-red-700 p-1 rounded"
+                            title="Delete Build"
+                          >
+                            🗑️
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-500 italic">
+                    Create your first build using the "+ New Build" button
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Build Templates - Horizontal Scroll */}
@@ -1309,12 +1441,14 @@ const PCBuilder: React.FC = () => {
 
                   {/* Build Actions */}
                   <div className="flex flex-col gap-3">
-                    <button
-                      onClick={handleAddToCart}
-                      className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
-                    >
-                      Add to Cart
-                    </button>
+                    {!isGuest && (
+                      <button
+                        onClick={handleAddToCart}
+                        className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
+                      >
+                        Add to Cart
+                      </button>
+                    )}
                     <button
                       onClick={handleClearBuild}
                       className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
@@ -1589,6 +1723,26 @@ const PCBuilder: React.FC = () => {
         message={modalMessage.message}
         confirmText="OK"
         variant="danger"
+      />
+
+      {/* Guest Signup Prompt Modal */}
+      <ConfirmModal
+        isOpen={showGuestSignupPrompt}
+        onClose={() => setShowGuestSignupPrompt(false)}
+        onConfirm={() => {
+          setShowGuestSignupPrompt(false);
+          // Open the signup modal
+          if (openAuthModal) {
+            openAuthModal("signup");
+          } else {
+            console.error("openAuthModal function not provided to PCBuilder");
+          }
+        }}
+        title="Save Your Build"
+        message="Create an account to save your build and access it later. You can also save multiple builds and sync your progress across devices!"
+        confirmText="Create Account"
+        cancelText="Continue Building"
+        variant="info"
       />
     </>
   );

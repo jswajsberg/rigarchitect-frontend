@@ -4,6 +4,12 @@ React + Vite frontend for creating and managing custom PC builds. Features user 
 
 ## Features
 
+- **PC Building Interface**: Interactive PC builder with component compatibility checking
+- **Guest Mode**: Full guest user experience with persistent build storage using database-backed sessions
+- **Component Catalog**: Advanced component browsing with filters, search, and detailed specifications
+- **Modal-based Authentication**: Seamless login/signup modals with guest-to-user data migration
+- **Filter Persistence**: Component catalog filters persist across tab switching and page refreshes
+- **Professional UI**: Card-based layouts with overlay details to prevent layout distortion
 - Connects to the RigArchitect Spring Boot backend API
 - Axios and Orval-generated API clients for type-safe API calls
 - React Query for asynchronous data fetching and caching
@@ -22,6 +28,21 @@ React + Vite frontend for creating and managing custom PC builds. Features user 
 - React Query (`@tanstack/react-query`, `@tanstack/react-query-devtools`)
 - Orval (for OpenAPI client generation)
 - Node.js 18+, npm 9+
+
+## Architecture
+
+### Context-based State Management
+- **AuthContext**: Manages user authentication, guest sessions, and data migration
+- **ComponentCatalogContext**: Persistent filter state with localStorage integration
+- **NavigationContext**: Tab navigation with persistent active tab state
+- **CartContext**: Shopping cart management
+- **BuilderContext**: PC build state management
+
+### Guest User Experience
+- Guest sessions are stored in the database with UUID-based session IDs
+- Guest builds persist across browser sessions using backend storage
+- Seamless migration from guest to authenticated user with data preservation
+- 30-day session expiration with automatic cleanup
 
 ## Getting Started
 

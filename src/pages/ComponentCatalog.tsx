@@ -5,6 +5,10 @@
 import React, { useState, useMemo } from "react";
 import { useSelectedUserId } from "../contexts/UserContext";
 import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "../contexts/AuthContext";
+import { useBuilder } from "../contexts/BuilderContext";
+import { useComponentCatalog } from "../contexts/ComponentCatalogContext";
+import { useGuestCart } from "../services/GuestCartService";
 import {
   useGetAllComponents,
   useGetComponentsByType,
@@ -34,7 +38,6 @@ import BuildSelectionModal from "../modals/BuildSelectionModal";
 import ComponentReplacementModal from "../modals/ComponentReplacementModal";
 import { determineSearchStrategy } from "../utils/searchStrategy";
 import { useCart } from "../contexts/CartContext";
-import type { SearchFilters } from "../components/SearchBar";
 
 // Lucide React icon imports for component categories
 import {
@@ -53,11 +56,33 @@ const ComponentCatalog: React.FC = () => {
   const selectedUserId = useSelectedUserId();
   const queryClient = useQueryClient();
   const { showToast } = useCart();
+  const { isGuest } = useAuth();
+  const { setCurrentBuild } = useBuilder();
+  const guestCart = useGuestCart();
 
-  // Local state for search and filtering
-  const [searchTerm, setSearchTerm] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
-  const [selectedType, setSelectedType] = useState<string | null>(null);
+  // Get filter state from context
+  const {
+    catalogState: {
+      searchTerm,
+      showFilters,
+      selectedType,
+      filters,
+      inStockOnly,
+      currentPage,
+      usePagination,
+    },
+    setSearchTerm,
+    setShowFilters,
+    setSelectedType,
+    setFilters,
+    setInStockOnly,
+    setCurrentPage,
+    setUsePagination,
+    resetPagination,
+    clearAllFilters,
+  } = useComponentCatalog();
+
+
 
   // Mutations for creating/deleting cart items
   const createItemMutation = useCreateItem();
@@ -120,20 +145,8 @@ const ComponentCatalog: React.FC = () => {
     quantity: 1,
   });
 
-  // Advanced search filters
-  const [filters, setFilters] = useState<SearchFilters>({
-    type: "",
-    brand: "",
-    compatibilityTag: "",
-    maxPrice: "",
-    minStock: "0",
-  });
-  const [inStockOnly, setInStockOnly] = useState(false);
-
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(0);
-  const [pageSize] = useState(12);
-  const [usePagination, setUsePagination] = useState(true);
+  // Pagination page size (not persisted)
+  const pageSize = 12;
 
   // Component types with associated icons - centralized for consistency
   const componentTypes = [
@@ -239,6 +252,7 @@ const ComponentCatalog: React.FC = () => {
   } = useGetAllComponentsPaged(paginationParams, {
     query: { enabled: usePagination && !selectedType },
   });
+
 
   // Fetch components of selected type (non-paginated)
   const { data: typeComponents, error: typeError } = useGetComponentsByType(
@@ -399,10 +413,7 @@ const ComponentCatalog: React.FC = () => {
   const isSearchLoading = isLoading;
   const searchErrorState = error;
 
-  // Reset page when filters change
-  const resetPagination = () => {
-    setCurrentPage(0);
-  };
+  // Note: resetPagination is now provided by context
 
   // Handle pagination controls
   const handlePageChange = (newPage: number) => {
@@ -412,7 +423,7 @@ const ComponentCatalog: React.FC = () => {
 
   const handleTogglePagination = () => {
     setUsePagination(!usePagination);
-    setCurrentPage(0);
+    resetPagination();
   };
 
   // Ensure shopping cart exists
@@ -444,6 +455,30 @@ const ComponentCatalog: React.FC = () => {
 
   // Component action handlers
   const handleAddToBuildCart = (component: ComponentResponse) => {
+    if (isGuest) {
+      // For guest users, add directly to their current build
+      const componentType = component.type;
+      
+      setCurrentBuild((prev) => {
+        const newBuild = { ...prev };
+        
+        if (componentType === "RAM" || componentType === "SSD" || componentType === "HDD") {
+          // For array-based components, add to existing array
+          const existing = (newBuild[componentType as keyof typeof newBuild] as ComponentResponse[]) || [];
+          newBuild[componentType as keyof typeof newBuild] = [...existing, component];
+        } else {
+          // For single components, replace existing
+          newBuild[componentType as keyof typeof newBuild] = component;
+        }
+        
+        console.log('DEBUG ComponentCatalog - Updated currentBuild:', newBuild, 'component added:', componentType, component.name);
+        return newBuild;
+      });
+      
+      showToast(`${component.name} added to your build!`, "success");
+      return;
+    }
+
     if (!selectedUserId) {
       showToast("Please select a user first!", "error");
       return;
@@ -456,6 +491,19 @@ const ComponentCatalog: React.FC = () => {
   };
 
   const handleAddToCheckoutCart = async (component: ComponentResponse) => {
+    if (isGuest) {
+      // For guest users, add to guest cart with quantity 1
+      try {
+        guestCart.addItem(component, 1);
+        showToast(`${component.name} added to cart!`, "success");
+        return;
+      } catch (error) {
+        console.error("Error adding to guest cart:", error);
+        showToast("Failed to add item to cart", "error");
+        return;
+      }
+    }
+
     if (!selectedUserId) {
       showToast("Please select a user first!", "error");
       return;
@@ -757,19 +805,7 @@ const ComponentCatalog: React.FC = () => {
     });
   };
 
-  // Clear all filters
-  const clearAllFilters = () => {
-    setSearchTerm("");
-    setSelectedType(null);
-    setFilters({
-      type: "",
-      brand: "",
-      compatibilityTag: "",
-      maxPrice: "",
-      minStock: "0",
-    });
-    setInStockOnly(false);
-  };
+  // Note: clearAllFilters is now provided by context
 
   // Clear only advanced search filters without closing the section
   const clearAdvancedFilters = () => {

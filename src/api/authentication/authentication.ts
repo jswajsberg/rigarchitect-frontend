@@ -39,8 +39,12 @@ import type {
   ChangePassword400,
   ChangePassword401,
   ChangePasswordRequest,
+  GuestToUserMigrationRequest,
   LoginRequest,
   LogoutUser200,
+  MigrateGuestData200,
+  MigrateGuestData400,
+  MigrateGuestData401,
   RefreshToken200,
   RefreshToken401,
   RefreshTokenRequest,
@@ -177,6 +181,68 @@ export const useRefreshToken = <TError = AxiosError<RefreshToken401>,
       > => {
 
       const mutationOptions = getRefreshTokenMutationOptions(options);
+
+      return useMutation(mutationOptions , queryClient);
+    }
+    /**
+ * Migrate guest session builds to user account
+ * @summary Migrate guest data
+ */
+export const migrateGuestData = (
+    guestToUserMigrationRequest: GuestToUserMigrationRequest, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<MigrateGuestData200>> => {
+    
+    
+    return axios.default.post(
+      `/api/v1/auth/migrate-guest`,
+      guestToUserMigrationRequest,options
+    );
+  }
+
+
+
+export const getMigrateGuestDataMutationOptions = <TError = AxiosError<MigrateGuestData400 | MigrateGuestData401>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof migrateGuestData>>, TError,{data: GuestToUserMigrationRequest}, TContext>, axios?: AxiosRequestConfig}
+): UseMutationOptions<Awaited<ReturnType<typeof migrateGuestData>>, TError,{data: GuestToUserMigrationRequest}, TContext> => {
+
+const mutationKey = ['migrateGuestData'];
+const {mutation: mutationOptions, axios: axiosOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, axios: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof migrateGuestData>>, {data: GuestToUserMigrationRequest}> = (props) => {
+          const {data} = props ?? {};
+
+          return  migrateGuestData(data,axiosOptions)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MigrateGuestDataMutationResult = NonNullable<Awaited<ReturnType<typeof migrateGuestData>>>
+    export type MigrateGuestDataMutationBody = GuestToUserMigrationRequest
+    export type MigrateGuestDataMutationError = AxiosError<MigrateGuestData400 | MigrateGuestData401>
+
+    /**
+ * @summary Migrate guest data
+ */
+export const useMigrateGuestData = <TError = AxiosError<MigrateGuestData400 | MigrateGuestData401>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof migrateGuestData>>, TError,{data: GuestToUserMigrationRequest}, TContext>, axios?: AxiosRequestConfig}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof migrateGuestData>>,
+        TError,
+        {data: GuestToUserMigrationRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getMigrateGuestDataMutationOptions(options);
 
       return useMutation(mutationOptions , queryClient);
     }
