@@ -19,8 +19,8 @@ import {
   Zap, // PSU
   Box, // Case
   Wind, // Cooler
-  ChevronDown, // Expand indicator
-  ChevronUp, // Collapse indicator
+  Eye, // View details
+  X, // Close modal
   ShoppingCart, // Add to cart
   Wrench, // Add to build
 } from "lucide-react";
@@ -34,20 +34,29 @@ const ComponentCard = ({
   const [isExpanded, setIsExpanded] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
 
-  // Close expanded details when clicking outside
+  // Close modal when clicking outside or pressing escape
   useEffect(() => {
+    if (!isExpanded) return;
+
     const handleClickOutside = (event: MouseEvent) => {
       if (cardRef.current && !cardRef.current.contains(event.target as Node)) {
         setIsExpanded(false);
       }
     };
 
-    if (isExpanded) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => {
-        document.removeEventListener('mousedown', handleClickOutside);
-      };
-    }
+    const handleEscapeKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsExpanded(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscapeKey);
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscapeKey);
+    };
   }, [isExpanded]);
 
   const formatPrice = (price?: number) => {
@@ -318,10 +327,8 @@ const ComponentCard = ({
             onClick={() => setIsExpanded(!isExpanded)}
             className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
           >
-            <span className="text-sm font-medium">
-              {isExpanded ? "Hide Details" : "View Details"}
-            </span>
-            {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            <Eye size={16} />
+            <span className="text-sm font-medium">View Details</span>
           </button>
 
           {/* Cart Action Buttons */}
@@ -353,78 +360,153 @@ const ComponentCard = ({
         </div>
       </div>
 
-      {/* Expanded Details - Positioned Absolutely */}
+
+      {/* Modal Overlay for Component Details */}
       {isExpanded && (
-        <div className="absolute top-full left-0 right-0 bg-white border rounded-lg shadow-xl z-20 p-5 max-h-96 overflow-y-auto">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="font-medium text-gray-900">
-              Technical Specifications
-            </h4>
-            <button
-              onClick={() => setIsExpanded(false)}
-              className="text-gray-400 hover:text-gray-600 p-1 rounded"
-              aria-label="Close details"
-            >
-              <ChevronUp size={16} />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {allDetails.map((detail, index) => (
-              <div key={index} className="flex justify-between py-1">
-                <span className="text-sm text-gray-600">{detail.label}:</span>
-                <span className="text-sm font-medium text-gray-900">
-                  {detail.value}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          {/* Extra Compatibility Data */}
-          {component.extraCompatibility &&
-            Object.keys(component.extraCompatibility).length > 0 && (
-              <div className="mt-4">
-                <h5 className="font-medium text-gray-900 mb-2">
-                  Additional Compatibility
-                </h5>
-                <div className="bg-white p-3 rounded border">
-                  <div className="grid grid-cols-1 gap-2">
-                    {Object.entries(component.extraCompatibility).map(
-                      ([key, value]) => (
-                        <div
-                          key={key}
-                          className="flex justify-between py-1 border-b border-gray-100 last:border-b-0"
-                        >
-                          <span className="text-sm text-gray-600 capitalize">
-                            {key.replace(/([A-Z])/g, " $1").trim()}:
-                          </span>
-                          <span className="text-sm font-medium text-gray-900">
-                            {typeof value === "object"
-                              ? JSON.stringify(value)
-                              : String(value)}
-                          </span>
-                        </div>
-                      )
-                    )}
+        <div 
+          className="fixed inset-0 z-50 overflow-y-auto"
+          style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }}
+        >
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+              {/* Modal Header */}
+              <div className="sticky top-0 bg-white border-b px-4 py-3 flex items-center justify-between rounded-t-lg">
+                <div className="flex items-center gap-2">
+                  <IconComponent size={24} className={iconConfig.colorClass} />
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900">
+                      {component.name || "Unnamed Component"}
+                    </h2>
+                    <p className="text-xs text-gray-600">
+                      {component.brand} • {component.type}
+                    </p>
                   </div>
                 </div>
-              </div>
-            )}
-
-          {/* Timestamps */}
-          <div className="mt-4 pt-3 border-t text-xs text-gray-500">
-            <div>
-              Added:{" "}
-              {component.createdAt
-                ? new Date(component.createdAt).toLocaleDateString()
-                : "Unknown"}
-            </div>
-            {component.updatedAt &&
-              component.updatedAt !== component.createdAt && (
-                <div>
-                  Updated: {new Date(component.updatedAt).toLocaleDateString()}
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <div className="text-lg font-bold text-gray-900">
+                      {formatPrice(component.price)}
+                    </div>
+                    <div className={`text-xs px-2 py-1 rounded-full ${stockStatus.bgColor} ${stockStatus.color}`}>
+                      {stockStatus.text}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setIsExpanded(false)}
+                    className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition-colors"
+                    aria-label="Close details"
+                  >
+                    <X size={18} />
+                  </button>
                 </div>
-              )}
+              </div>
+
+              {/* Modal Body */}
+              <div className="px-4 pb-4 pt-2">
+                {/* Technical Specifications */}
+                <div className="mb-6">
+                  <h3 className="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                    <div className="w-1 h-5 bg-blue-600 rounded"></div>
+                    Technical Specifications
+                  </h3>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
+                      {allDetails.map((detail, index) => (
+                        <div key={index} className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600 font-medium">{detail.label}</span>
+                          <span className="text-sm text-gray-900 font-semibold">
+                            {detail.value}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Extra Compatibility Data */}
+                {component.extraCompatibility &&
+                  Object.keys(component.extraCompatibility).length > 0 && (
+                    <div className="mb-6">
+                      <h3 className="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <div className="w-1 h-5 bg-green-600 rounded"></div>
+                        Additional Compatibility
+                      </h3>
+                      <div className="bg-green-50 rounded-lg p-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
+                          {Object.entries(component.extraCompatibility).map(
+                            ([key, value]) => (
+                              <div key={key} className="flex justify-between items-center">
+                                <span className="text-sm text-gray-600 font-medium capitalize">
+                                  {key.replace(/([A-Z])/g, " $1").trim()}
+                                </span>
+                                <span className="text-sm text-gray-900 font-semibold">
+                                  {typeof value === "object"
+                                    ? JSON.stringify(value)
+                                    : String(value)}
+                                </span>
+                              </div>
+                            )
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                {/* Timestamps */}
+                <div className="border-t border-gray-200 pt-4 mb-4">
+                  <div className="flex justify-between items-center text-xs text-gray-500">
+                    <div className="flex gap-6">
+                      <span>
+                        <span className="font-medium">Added:</span>{" "}
+                        {component.createdAt
+                          ? new Date(component.createdAt).toLocaleDateString()
+                          : "Unknown"}
+                      </span>
+                      {component.updatedAt &&
+                        component.updatedAt !== component.createdAt && (
+                          <span>
+                            <span className="font-medium">Updated:</span>{" "}
+                            {new Date(component.updatedAt).toLocaleDateString()}
+                          </span>
+                        )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Buttons in Modal */}
+                {showCartButtons && (
+                  <div className="flex gap-3 pt-4 border-t border-gray-200">
+                    {onAddToBuildCart && (
+                      <button
+                        onClick={() => {
+                          onAddToBuildCart(component);
+                          setIsExpanded(false);
+                        }}
+                        disabled={stockStatus.text === "Out of stock"}
+                        className="flex-1 flex items-center justify-center gap-2 px-5 py-3 border-2 border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-300 disabled:cursor-not-allowed transition-all duration-200 font-medium"
+                      >
+                        <Wrench size={18} />
+                        <span>Add to Build</span>
+                      </button>
+                    )}
+
+                    {onAddToCheckoutCart && (
+                      <button
+                        onClick={() => {
+                          onAddToCheckoutCart(component);
+                          setIsExpanded(false);
+                        }}
+                        disabled={stockStatus.text === "Out of stock"}
+                        className="flex-1 flex items-center justify-center gap-2 px-5 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-200 font-medium shadow-md hover:shadow-lg"
+                      >
+                        <ShoppingCart size={18} />
+                        <span>Buy Now</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

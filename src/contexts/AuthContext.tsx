@@ -399,6 +399,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Clear all cached data
     queryClient.clear();
 
+    // Clear guest cart to start fresh
+    guestCartService.clearCart();
+
     // Reinitialize guest mode after logout
     await initializeGuestMode();
 

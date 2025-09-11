@@ -2,7 +2,7 @@
  * Builder context for managing PC build state and configurations
  * @module BuilderContext
  */
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { useAuth } from "./AuthContext";
 import type { BuildSlots } from "../utils/compatibilityChecker";
 
@@ -32,7 +32,7 @@ const BuilderContext = createContext<BuilderContextType | undefined>(undefined);
 export const BuilderProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const { user: authUser } = useAuth();
+  const { user: authUser, mode } = useAuth();
   const [selectedBuildId, setSelectedBuildId] = useState<number | null>(null);
   const [currentBuild, setCurrentBuild] = useState<BuildSlots>({});
   const [buildName, setBuildName] = useState<string>("");
@@ -51,6 +51,15 @@ export const BuilderProvider: React.FC<{ children: React.ReactNode }> = ({
   const [priceRange, setPriceRange] =
     useState<PriceRange>(getInitialPriceRange);
 
+  const clearBuildState = useCallback(() => {
+    const budget = authUser?.budget || 5000;
+    setSelectedBuildId(null);
+    setCurrentBuild({});
+    setPriceRange({ min: 0, max: budget }); // Reset to budget-based range
+    setBuildName("");
+    setIsModifyingExisting(false);
+  }, [authUser?.budget]);
+
   // Update price range when user budget changes
   useEffect(() => {
     if (authUser?.budget) {
@@ -63,14 +72,12 @@ export const BuilderProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, [authUser?.budget]);
 
-  const clearBuildState = () => {
-    const budget = authUser?.budget || 5000;
-    setSelectedBuildId(null);
-    setCurrentBuild({});
-    setPriceRange({ min: 0, max: budget }); // Reset to budget-based range
-    setBuildName("");
-    setIsModifyingExisting(false);
-  };
+  // Clear build state when switching to guest mode
+  useEffect(() => {
+    if (mode === 'guest') {
+      clearBuildState();
+    }
+  }, [mode, clearBuildState]);
 
   return (
     <BuilderContext.Provider

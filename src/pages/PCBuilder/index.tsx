@@ -14,6 +14,7 @@ import {
 import { useGetItemsByCart } from "../../api/cart-item-controller/cart-item-controller";
 import { useAuth } from "../../contexts/AuthContext";
 import { useGuestCart } from "../../services/GuestCartService";
+import { useGuestBuilds } from "../../services/GuestService";
 import type { ComponentResponse, CartItemResponse } from "../../api/model";
 import {
   checkBuildCompatibility,
@@ -64,6 +65,9 @@ const PCBuilder: React.FC<PCBuilderProps> = ({ openAuthModal }) => {
   
   // Guest cart functionality
   const guestCart = useGuestCart();
+  
+  // Guest build functionality
+  const { saveGuestBuild, getLatestGuestBuild } = useGuestBuilds();
 
   // === Persistent builder state (from BuilderContext) ===
   const {
@@ -158,7 +162,9 @@ const PCBuilder: React.FC<PCBuilderProps> = ({ openAuthModal }) => {
     setComponentSnapshotTimestamp(null);
   }, []);
 
-  // Use the extracted build operations hook
+  // Guest-specific handlers for save and add to cart
+
+  // Use guest handlers when in guest mode, otherwise use authenticated handlers
   const buildOps = useBuildOperations({
     selectedBuildItems,
     createItemMutation,
@@ -166,15 +172,13 @@ const PCBuilder: React.FC<PCBuilderProps> = ({ openAuthModal }) => {
     lastOperationRef,
   });
 
-  // Guest-specific handlers for save and add to cart
-
-  // Use guest handlers when in guest mode, otherwise use authenticated handlers
+  // Destructure what we need from buildOps
   const {
     handleLoadBuild,
     handleDeleteBuild,
-    handleDeleteConfirmed,
-    handleClearBuild: originalHandleClearBuild,
-    handleClearConfirmed,
+    handleDeleteConfirmed: authHandleDeleteConfirmed,
+    handleClearBuild: authHandleClearBuild,
+    handleClearConfirmed: authHandleClearConfirmed,
     handleBuildNameConfirm,
     showDeleteConfirm,
     setShowDeleteConfirm,
@@ -398,14 +402,6 @@ const PCBuilder: React.FC<PCBuilderProps> = ({ openAuthModal }) => {
     isUsingTemplate,
   ]);
 
-  // Wrapper for clear build that also sets the user explicitly cleared flag
-  const handleClearBuild = useCallback(() => {
-    originalHandleClearBuild();
-    setUserExplicitlyCleared(true);
-    setSelectedTemplateId(""); // Clear template selection when build is cleared
-    setIsUsingTemplate(false); // Reset template flag
-    clearComponentSnapshot(); // Clear component snapshot for fresh data
-  }, [originalHandleClearBuild, clearComponentSnapshot]);
 
   // Template scrolling functions
   const checkScrollButtons = useCallback(() => {
@@ -525,6 +521,55 @@ const PCBuilder: React.FC<PCBuilderProps> = ({ openAuthModal }) => {
     setCurrentBuild,
   ]);
 
+  // Auto-save guest builds when build changes
+  useEffect(() => {
+    if (isGuest && Object.keys(currentBuild).length > 0) {
+      const buildData = {
+        build: currentBuild,
+        buildName: buildName || 'Untitled Build',
+        timestamp: Date.now()
+      };
+
+      // Debounce the save to avoid too many API calls
+      const timeoutId = setTimeout(async () => {
+        try {
+          await saveGuestBuild(buildData);
+        } catch (error) {
+          console.error('Failed to auto-save guest build:', error);
+        }
+      }, 1000); // Wait 1 second after changes before saving
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [isGuest, currentBuild, buildName, saveGuestBuild]);
+
+  // Load latest guest build on mount
+  useEffect(() => {
+    if (isGuest && Object.keys(currentBuild).length === 0 && !userExplicitlyCleared) {
+      const loadGuestBuild = async () => {
+        try {
+          const latestBuild = await getLatestGuestBuild();
+          if (latestBuild?.buildData) {
+            const buildData = JSON.parse(latestBuild.buildData);
+            if (buildData.build && Object.keys(buildData.build).length > 0) {
+              setCurrentBuild(buildData.build);
+              if (buildData.buildName) {
+                setBuildName(buildData.buildName);
+              }
+            }
+          }
+        } catch (error) {
+          // Ignore 404 errors - it just means no builds exist yet for this guest
+          if (error?.response?.status !== 404) {
+            console.error('Failed to load guest build:', error);
+          }
+        }
+      };
+
+      loadGuestBuild();
+    }
+  }, [isGuest, getLatestGuestBuild, setCurrentBuild, setBuildName, currentBuild, userExplicitlyCleared]);
+
   // Compatibility check
   const compatibility = useMemo(
     () => checkBuildCompatibility(currentBuild),
@@ -642,6 +687,41 @@ const PCBuilder: React.FC<PCBuilderProps> = ({ openAuthModal }) => {
     }
   }, [currentBuild, guestCart, setModalMessage]);
 
+  const handleGuestClearBuild = useCallback(() => {
+    const componentCount = Object.keys(currentBuild).length;
+    if (componentCount === 0) {
+      return;
+    }
+
+    const confirmMessage = `This will remove all ${componentCount} selected components and cannot be undone.`;
+    setClearConfirmMessage(confirmMessage);
+    setShowClearConfirm(true);
+  }, [currentBuild, setClearConfirmMessage, setShowClearConfirm]);
+
+  const handleGuestClearConfirmed = useCallback(async () => {
+    try {
+      // Save an empty build to the backend to replace the existing one
+      const emptyBuildData = {
+        build: {},
+        buildName: '',
+        timestamp: Date.now()
+      };
+      await saveGuestBuild(emptyBuildData);
+    } catch (error) {
+      console.error('Failed to clear guest build from backend:', error);
+    }
+    
+    // Clear the build state directly for guests
+    setCurrentBuild({});
+    setBuildName("");
+    setUserExplicitlyCleared(true);
+    setSelectedTemplateId("");
+    setIsUsingTemplate(false);
+    clearComponentSnapshot(); // Clear component snapshot for fresh data
+    
+    setShowClearConfirm(false);
+  }, [setCurrentBuild, setBuildName, setShowClearConfirm, clearComponentSnapshot, saveGuestBuild]);
+
   // Handler assignments using useMemo to avoid hoisting issues
   const handleSaveBuild = useMemo(() => {
     const saveFn = isGuest ? handleGuestSaveBuild : buildOps.handleSaveBuild;
@@ -652,6 +732,14 @@ const PCBuilder: React.FC<PCBuilderProps> = ({ openAuthModal }) => {
   const handleAddToCart = useMemo(() => {
     return isGuest ? handleGuestAddToCart : buildOps.handleAddToCart;
   }, [isGuest, handleGuestAddToCart, buildOps.handleAddToCart]);
+
+  const handleClearBuild = useMemo(() => {
+    return isGuest ? handleGuestClearBuild : authHandleClearBuild;
+  }, [isGuest, handleGuestClearBuild, authHandleClearBuild]);
+
+  const handleClearConfirmed = useMemo(() => {
+    return isGuest ? handleGuestClearConfirmed : authHandleClearConfirmed;
+  }, [isGuest, handleGuestClearConfirmed, authHandleClearConfirmed]);
 
   // Component selection handlers
   const handleSelectComponent = useCallback(
@@ -1706,7 +1794,7 @@ const PCBuilder: React.FC<PCBuilderProps> = ({ openAuthModal }) => {
       <ConfirmModal
         isOpen={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
-        onConfirm={handleDeleteConfirmed}
+        onConfirm={authHandleDeleteConfirmed}
         title="Delete Build"
         message={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
         confirmText="Delete"
