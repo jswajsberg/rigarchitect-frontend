@@ -17,7 +17,10 @@ import {
 import type { UserResponse } from "../api/model";
 import { authAPI, authService } from "../services/AuthService";
 import { guestService } from "../services/GuestService";
+import { guestCartService } from "../services/GuestCartService";
 import { migrateGuestData } from "../api/authentication/authentication";
+import { createCartForUser } from "../api/build-cart-controller/build-cart-controller";
+import { createItem as createCartItem } from "../api/cart-item-controller/cart-item-controller";
 
 // Authentication types
 interface AuthUser extends UserResponse {
@@ -180,7 +183,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const migrateGuestToUser = async (): Promise<{ success: boolean; error?: string }> => {
+  const migrateGuestToUser = async (userData: UserResponse): Promise<{ success: boolean; error?: string }> => {
     try {
       const sessionId = guestService.getSessionForMigration();
       if (!sessionId) {
@@ -190,14 +193,51 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         };
       }
 
-      // Migrate guest data to user account
+      // Save guest cart data before migration
+      const guestCartData = guestCartService.exportCartData();
+      
+      // Migrate guest data to user account (builds, etc.)
       await migrateGuestData({
         sessionId
       });
 
-      // Clear guest session
+      // Clear guest session and cart
       guestService.clearSession();
+      guestCartService.clearCart();
       setIsGuest(false);
+
+      // Migrate guest cart to authenticated user cart
+      if (guestCartData && guestCartData.items && guestCartData.items.length > 0) {
+        try {
+          // Create a shopping cart for the new user
+          const newCartResponse = await createCartForUser(
+            userData.id, 
+            { name: "Shopping Cart", status: "DRAFT" }
+          );
+          
+          const cartId = newCartResponse.data.id;
+          
+          // Add all guest cart items to the new user cart
+          for (const item of guestCartData.items) {
+            await createCartItem({
+              cartId,
+              componentId: item.component.id,
+              quantity: item.quantity
+            });
+          }
+          
+          // Invalidate cart queries to refresh UI
+          queryClient.invalidateQueries({
+            queryKey: [`/api/v1/carts/user/${userData.id}`],
+          });
+          queryClient.invalidateQueries({
+            queryKey: [`/api/v1/items/cart/${cartId}`],
+          });
+        } catch (error) {
+          console.error("Error migrating guest cart:", error);
+          // Don't fail the entire migration if cart migration fails
+        }
+      }
 
       return { success: true };
     } catch (error: any) {
@@ -236,7 +276,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // Migrate guest data if user was previously a guest
       if (isGuest) {
-        await migrateGuestToUser();
+        await migrateGuestToUser(response.user);
       }
 
       return { success: true };
@@ -292,7 +332,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // Migrate guest data if user was previously a guest
       if (isGuest) {
-        await migrateGuestToUser();
+        await migrateGuestToUser(response.user);
       }
 
       return { success: true };

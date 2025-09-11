@@ -5,6 +5,8 @@
 import { useState, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSelectedUserId } from "../contexts/UserContext";
+import { useAuthMode } from "../contexts/AuthContext";
+import { useGuestCart } from "../services/GuestCartService";
 import {
   useGetUserCarts,
   useCreateCartForUser,
@@ -33,6 +35,7 @@ import {
   User,
   AlertTriangle,
   Loader2,
+  Wrench,
   // Component type icons (consistent with other pages)
   Cpu, // CPU
   Monitor, // GPU
@@ -45,9 +48,16 @@ import {
   Wind, // Cooler
 } from "lucide-react";
 
-const ShoppingCart = () => {
+interface ShoppingCartProps {
+  openAuthModal?: (mode?: "login" | "signup") => void;
+  setActiveTab?: (tab: string) => void;
+}
+
+const ShoppingCart = ({ openAuthModal, setActiveTab }: ShoppingCartProps) => {
   const queryClient = useQueryClient();
+  const { isGuest } = useAuthMode();
   const selectedUserId = useSelectedUserId();
+  const guestCart = useGuestCart();
   const [addComponentId, setAddComponentId] = useState("");
   const [addQuantity, setAddQuantity] = useState(1);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
@@ -282,7 +292,7 @@ const ShoppingCart = () => {
   };
 
   // Handle conditional rendering after all hooks are called
-  if (!selectedUserId) {
+  if (!selectedUserId && !isGuest) {
     return (
       <div className="p-6 max-w-7xl mx-auto">
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-8 text-center">
@@ -320,6 +330,203 @@ const ShoppingCart = () => {
             Error loading cart
           </h3>
           <p className="text-red-600">Please try refreshing the page.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Render guest cart if in guest mode
+  if (isGuest) {
+    const guestCartData = guestCart.getCart();
+    const guestItems = guestCartData.items;
+
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        {/* Guest Cart Header */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-2">
+            <ShoppingCartIcon size={32} className="text-blue-600" />
+            <h2 className="text-3xl font-bold text-gray-900">Shopping Cart</h2>
+            <span className="bg-amber-100 text-amber-800 text-sm px-2 py-1 rounded-full">
+              Guest Mode
+            </span>
+          </div>
+          <p className="text-gray-600 mt-2">
+            Review your selected components. Sign up to checkout and save your cart!
+          </p>
+          {guestItems.length > 0 && (
+            <div className="flex items-center gap-2 text-xl font-semibold text-green-600 mt-3">
+              <DollarSign size={24} />
+              Total: ${guestCartData.totalPrice.toFixed(2)}
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Guest Cart Items */}
+          <div className="lg:col-span-2">
+            <div className="bg-white rounded-lg shadow-md border">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <Package size={20} className="text-blue-600" />
+                    <h3 className="text-xl font-semibold">Cart Items</h3>
+                    {guestItems.length > 0 && (
+                      <span className="bg-blue-100 text-blue-800 text-sm px-2 py-1 rounded-full">
+                        {guestItems.length}
+                      </span>
+                    )}
+                  </div>
+                  {guestItems.length > 0 && (
+                    <button
+                      onClick={() => {
+                        guestCart.clearCart();
+                        setModalMessage({
+                          title: "Success",
+                          message: "Cart cleared successfully!"
+                        });
+                        setShowSuccess(true);
+                      }}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm transition-colors"
+                      title="Remove all items from cart"
+                    >
+                      <Trash2 size={16} />
+                      Clear All
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-6">
+                {guestItems.length === 0 ? (
+                  <div className="text-center py-12">
+                    <ShoppingCartIcon size={48} className="text-gray-300 mx-auto mb-4" />
+                    <h4 className="text-lg font-medium text-gray-500 mb-2">Your cart is empty</h4>
+                    <p className="text-gray-400">Browse components and add items to get started!</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {guestItems.map((item) => (
+                      <div key={item.id} className="flex items-center gap-4 p-4 border border-gray-200 rounded-lg">
+                        <div className="flex-1">
+                          <h4 className="font-medium text-gray-900">{item.component.name}</h4>
+                          <p className="text-sm text-gray-600">{item.component.brand}</p>
+                          <p className="text-sm font-medium text-green-600">
+                            ${item.component.price.toFixed(2)} each
+                          </p>
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              const newQuantity = Math.max(1, item.quantity - 1);
+                              guestCart.updateQuantity(item.id, newQuantity);
+                            }}
+                            className="p-1 rounded hover:bg-gray-100"
+                          >
+                            <Minus size={16} />
+                          </button>
+                          <span className="w-8 text-center font-medium">{item.quantity}</span>
+                          <button
+                            onClick={() => {
+                              guestCart.updateQuantity(item.id, item.quantity + 1);
+                            }}
+                            className="p-1 rounded hover:bg-gray-100"
+                          >
+                            <Plus size={16} />
+                          </button>
+                        </div>
+
+                        <div className="text-right">
+                          <p className="font-medium text-gray-900">
+                            ${(item.component.price * item.quantity).toFixed(2)}
+                          </p>
+                          <button
+                            onClick={() => {
+                              guestCart.removeItem(item.id);
+                              setModalMessage({
+                                title: "Success",
+                                message: `${item.component.name} removed from cart!`
+                              });
+                              setShowSuccess(true);
+                            }}
+                            className="text-red-600 hover:text-red-800 mt-1"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Guest Cart Actions */}
+          <div className="lg:col-span-1">
+            <div className="bg-white rounded-lg shadow-md border p-6">
+              <h3 className="text-lg font-semibold mb-4">Cart Actions</h3>
+              
+              {guestItems.length > 0 ? (
+                <div className="space-y-3">
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <AlertTriangle size={20} className="text-amber-600" />
+                      <p className="font-medium text-amber-800">Sign up to checkout</p>
+                    </div>
+                    <p className="text-sm text-amber-700">
+                      Create an account to complete your purchase and save your cart for later.
+                    </p>
+                  </div>
+                  
+                  <button
+                    onClick={() => openAuthModal && openAuthModal("signup")}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    <CreditCard size={20} />
+                    Sign Up to Checkout
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Lightbulb size={20} className="text-blue-600" />
+                      <p className="font-medium text-blue-800">Start shopping</p>
+                    </div>
+                    <p className="text-sm text-blue-700">
+                      Browse our components or use the PC Builder to create your perfect setup!
+                    </p>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => setActiveTab && setActiveTab("components")}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                    >
+                      <Package size={18} />
+                      Browse Components
+                    </button>
+                    
+                    <button
+                      onClick={() => setActiveTab && setActiveTab("builds")}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      <Wrench size={18} />
+                      Build PC
+                    </button>
+                  </div>
+                  
+                  <div className="pt-2 border-t border-gray-200">
+                    <p className="text-xs text-gray-500 text-center">
+                      Create an account to save your builds and checkout
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     );

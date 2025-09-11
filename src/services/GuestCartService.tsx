@@ -2,6 +2,7 @@
  * Guest cart service for managing shopping cart in localStorage for anonymous users
  * @module GuestCartService
  */
+import React from 'react';
 import type { ComponentResponse } from '../api/model';
 import { guestService } from './GuestService';
 
@@ -23,6 +24,7 @@ class GuestCartService {
   private static instance: GuestCartService;
   private cart: GuestCart | null = null;
   private readonly STORAGE_KEY = 'rigarchitect_guest_cart';
+  private listeners: Set<() => void> = new Set();
 
   private constructor() {
     this.initializeCart();
@@ -73,14 +75,30 @@ class GuestCartService {
   }
 
   /**
-   * Save cart to localStorage
+   * Save cart to localStorage and notify listeners
    */
   private saveCart() {
     try {
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.cart));
+      this.notifyListeners();
     } catch (error) {
       console.error('Error saving guest cart:', error);
     }
+  }
+
+  /**
+   * Subscribe to cart changes
+   */
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  /**
+   * Notify all listeners of cart changes
+   */
+  private notifyListeners() {
+    this.listeners.forEach(listener => listener());
   }
 
   /**
@@ -313,16 +331,61 @@ export const guestCartService = GuestCartService.getInstance();
 
 // Export utility hooks
 export const useGuestCart = () => {
-  const getCart = () => guestCartService.getCart();
-  const addItem = (component: ComponentResponse, quantity?: number) => 
-    guestCartService.addItem(component, quantity);
-  const updateQuantity = (itemId: string, quantity: number) => 
-    guestCartService.updateItemQuantity(itemId, quantity);
-  const removeItem = (itemId: string) => 
-    guestCartService.removeItem(itemId);
-  const clearCart = () => guestCartService.clearCart();
-  const saveAsBuild = (name?: string) => guestCartService.saveCartAsBuild(name);
-  const loadBuild = (buildData: any) => guestCartService.loadBuildIntoCart(buildData);
+  const [cart, setCart] = React.useState(() => guestCartService.getCart());
+  const [updateCounter, setUpdateCounter] = React.useState(0);
+
+  // Subscribe to cart changes
+  React.useEffect(() => {
+    const unsubscribe = guestCartService.subscribe(() => {
+      const newCart = guestCartService.getCart();
+      setCart(newCart);
+      setUpdateCounter(prev => prev + 1);
+    });
+    return unsubscribe;
+  }, []);
+
+  // Force update after operations
+  const forceUpdate = React.useCallback(() => {
+    const newCart = guestCartService.getCart();
+    setCart(newCart);
+    setUpdateCounter(prev => prev + 1);
+  }, []);
+
+  const getCart = () => cart;
+  
+  const addItem = (component: ComponentResponse, quantity?: number) => {
+    const result = guestCartService.addItem(component, quantity);
+    forceUpdate();
+    return result;
+  };
+  
+  const updateQuantity = (itemId: string, quantity: number) => {
+    const result = guestCartService.updateItemQuantity(itemId, quantity);
+    forceUpdate();
+    return result;
+  };
+  
+  const removeItem = (itemId: string) => {
+    const result = guestCartService.removeItem(itemId);
+    forceUpdate();
+    return result;
+  };
+  
+  const clearCart = () => {
+    guestCartService.clearCart();
+    forceUpdate();
+  };
+  
+  const saveAsBuild = async (name?: string) => {
+    const result = await guestCartService.saveCartAsBuild(name);
+    forceUpdate();
+    return result;
+  };
+  
+  const loadBuild = (buildData: any) => {
+    guestCartService.loadBuildIntoCart(buildData);
+    forceUpdate();
+  };
 
   return {
     getCart,
@@ -332,8 +395,8 @@ export const useGuestCart = () => {
     clearCart,
     saveAsBuild,
     loadBuild,
-    itemCount: guestCartService.getItemCount(),
-    totalPrice: guestCartService.getTotalPrice(),
-    isEmpty: guestCartService.isEmpty()
+    itemCount: cart.totalItems,
+    totalPrice: cart.totalPrice,
+    isEmpty: cart.items.length === 0
   };
 };

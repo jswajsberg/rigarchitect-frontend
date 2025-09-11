@@ -6,6 +6,7 @@
 import React, { useState } from "react";
 import { useAuth, useAuthMode } from "../contexts/AuthContext";
 import { useCart } from "../contexts/CartContext";
+import { useGuestCart } from "../services/GuestCartService";
 import { useUpdateUserBudget } from "../api/user-controller/user-controller";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -39,6 +40,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
   const { user: authUser, logout } = useAuth();
   const { mode, isAuthenticated, isGuest } = useAuthMode();
   const { shoppingCartItemCount } = useCart();
+  const { itemCount: guestCartItemCount } = useGuestCart();
   const queryClient = useQueryClient();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showGuestMenu, setShowGuestMenu] = useState(false);
@@ -85,13 +87,15 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
       icon: Package,
       color: "text-green-600",
     }] : []),
-    ...(!isGuest ? [{
+    {
       id: "cart",
       label: "Shopping Cart",
       icon: ShoppingCart,
       color: "text-orange-600",
-      badge: shoppingCartItemCount > 0 ? shoppingCartItemCount : undefined,
-    }] : []),
+      badge: isGuest 
+        ? (guestCartItemCount > 0 ? guestCartItemCount : undefined)
+        : (shoppingCartItemCount > 0 ? shoppingCartItemCount : undefined),
+    },
   ];
 
   const handleLogout = () => {

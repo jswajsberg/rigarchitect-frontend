@@ -47,6 +47,7 @@ import {
   Lightbulb,
   ChevronLeft,
   ChevronRight,
+  Wrench,
 } from "lucide-react";
 
 interface PCBuilderProps {
@@ -122,8 +123,6 @@ const PCBuilder: React.FC<PCBuilderProps> = ({ openAuthModal }) => {
 
   const components = allComponents?.data || [];
   
-  // Debug: Check if currentBuild has components when component loads
-  console.log('DEBUG PCBuilder - currentBuild state:', currentBuild, 'keys:', Object.keys(currentBuild));
 
   // Create or maintain component snapshot for consistent template application
   const getComponentSnapshot = useCallback(() => {
@@ -187,6 +186,7 @@ const PCBuilder: React.FC<PCBuilderProps> = ({ openAuthModal }) => {
     setShowError,
     deleteTarget,
     modalMessage,
+    setModalMessage,
     clearConfirmMessage,
     setClearConfirmMessage,
   } = buildOps;
@@ -614,16 +614,33 @@ const PCBuilder: React.FC<PCBuilderProps> = ({ openAuthModal }) => {
       // Add all components from current build to guest cart
       const components = Object.values(currentBuild).flat().filter(Boolean);
       
+      if (components.length === 0) {
+        setModalMessage({
+          title: "Empty Build",
+          message: "Please add some components to your build before adding to cart."
+        });
+        setShowError(true);
+        return;
+      }
+      
       for (const component of components) {
         guestCart.addItem(component as ComponentResponse, 1);
       }
 
+      setModalMessage({
+        title: "Success!",
+        message: `Added ${components.length} component${components.length === 1 ? '' : 's'} from your build to the cart!`
+      });
       setShowSaveSuccess(true);
     } catch (error) {
       console.error('Error adding to guest cart:', error);
+      setModalMessage({
+        title: "Error",
+        message: "Failed to add components to cart. Please try again."
+      });
       setShowError(true);
     }
-  }, [currentBuild, guestCart]);
+  }, [currentBuild, guestCart, setModalMessage]);
 
   // Handler assignments using useMemo to avoid hoisting issues
   const handleSaveBuild = useMemo(() => {
@@ -887,7 +904,15 @@ const PCBuilder: React.FC<PCBuilderProps> = ({ openAuthModal }) => {
         <div className="mb-6">
           <div className="flex justify-between items-start mb-4">
             <div>
-              <h1 className="text-3xl font-bold mb-2">PC Builder</h1>
+              <div className="flex items-center gap-3 mb-2">
+                <Wrench size={32} className="text-blue-600" />
+                <h1 className="text-3xl font-bold">PC Builder</h1>
+                {isGuest && (
+                  <span className="bg-amber-100 text-amber-800 text-sm px-2 py-1 rounded-full">
+                    Guest Mode
+                  </span>
+                )}
+              </div>
               <p className="text-gray-600">
                 {isGuest 
                   ? "Build your perfect PC - create an account to save your progress" 
@@ -1441,14 +1466,12 @@ const PCBuilder: React.FC<PCBuilderProps> = ({ openAuthModal }) => {
 
                   {/* Build Actions */}
                   <div className="flex flex-col gap-3">
-                    {!isGuest && (
-                      <button
-                        onClick={handleAddToCart}
-                        className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
-                      >
-                        Add to Cart
-                      </button>
-                    )}
+                    <button
+                      onClick={handleAddToCart}
+                      className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
+                    >
+                      Add to Cart
+                    </button>
                     <button
                       onClick={handleClearBuild}
                       className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"

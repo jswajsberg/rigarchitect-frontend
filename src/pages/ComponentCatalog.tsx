@@ -5,7 +5,7 @@
 import React, { useState, useMemo } from "react";
 import { useSelectedUserId } from "../contexts/UserContext";
 import { useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth, useAuthMode } from "../contexts/AuthContext";
 import { useBuilder } from "../contexts/BuilderContext";
 import { useComponentCatalog } from "../contexts/ComponentCatalogContext";
 import { useGuestCart } from "../services/GuestCartService";
@@ -50,6 +50,7 @@ import {
   Zap, // PSU
   Box, // Case
   Wind, // Cooler
+  Package, // For page title icon
 } from "lucide-react";
 
 const ComponentCatalog: React.FC = () => {
@@ -471,7 +472,6 @@ const ComponentCatalog: React.FC = () => {
           newBuild[componentType as keyof typeof newBuild] = component;
         }
         
-        console.log('DEBUG ComponentCatalog - Updated currentBuild:', newBuild, 'component added:', componentType, component.name);
         return newBuild;
       });
       
@@ -843,9 +843,17 @@ const ComponentCatalog: React.FC = () => {
     <div className="p-6 max-w-7xl mx-auto">
       {/* Enhanced Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          Component Catalog
-        </h1>
+        <div className="flex items-center gap-3 mb-2">
+          <Package size={32} className="text-blue-600" />
+          <h1 className="text-3xl font-bold text-gray-900">
+            Component Catalog
+          </h1>
+          {isGuest && (
+            <span className="bg-amber-100 text-amber-800 text-sm px-2 py-1 rounded-full">
+              Guest Mode
+            </span>
+          )}
+        </div>
         <p className="text-gray-600">
           Browse and search components for your PC builds
         </p>

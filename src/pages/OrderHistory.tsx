@@ -13,6 +13,7 @@ import {
   Package, // Total Orders
   DollarSign, // Total Spent
   TrendingUp, // Average Order
+  FileText, // For page title icon
   ShoppingCart, // Empty state
   Printer, // Print receipt
   ChevronDown, // Expand details
@@ -154,8 +155,11 @@ const OrderHistory: React.FC = () => {
     <div className="p-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Order History</h1>
-        <p className="text-gray-600 mt-2">
+        <div className="flex items-center gap-3 mb-2">
+          <FileText size={32} className="text-blue-600" />
+          <h1 className="text-3xl font-bold text-gray-900">Order History</h1>
+        </div>
+        <p className="text-gray-600">
           View your completed PC build purchases and download receipts
         </p>
       </div>

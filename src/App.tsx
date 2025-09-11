@@ -47,7 +47,7 @@ const AppContent = () => {
   const renderContent = () => {
     switch (activeTab) {
       case "cart":
-        return <ShoppingCart />;
+        return <ShoppingCart openAuthModal={openAuthModal} setActiveTab={setActiveTab} />;
       case "components":
         return <ComponentCatalog />;
       case "orders":
@@ -84,7 +84,6 @@ const AppContent = () => {
         initialMode={authModalMode}
         onSuccess={() => {
           // Optional: Handle successful authentication
-          console.log("User authenticated successfully");
         }}
       />
     </div>

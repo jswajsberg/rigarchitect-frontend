@@ -565,6 +565,7 @@ export const useBuildOperations = ({
     setShowError,
     deleteTarget,
     modalMessage,
+    setModalMessage,
     clearConfirmMessage,
     setClearConfirmMessage,
   };
