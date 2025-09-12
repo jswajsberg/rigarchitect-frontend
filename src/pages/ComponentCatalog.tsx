@@ -207,9 +207,29 @@ const ComponentCatalog: React.FC = () => {
     },
   ];
 
+  // Handle slang terms by detecting component type and switching to type-specific API
+  const slangDetectedType = useMemo(() => {
+    if (!searchTerm.trim()) return null;
+    
+    const strategy = determineSearchStrategy(searchTerm, false, filters, componentTypes);
+    
+    // If strategy detected a component type from slang, return the type
+    if (strategy?.strategy === "type" && strategy.params) {
+      return strategy.params as string;
+    }
+    
+    return null;
+  }, [searchTerm, filters, componentTypes]);
+
+  // For pagination with non-slang terms, use the original search term
+  const expandedSearchTerm = useMemo(() => {
+    if (!searchTerm.trim() || slangDetectedType) return undefined;
+    return searchTerm.trim();
+  }, [searchTerm, slangDetectedType]);
+
   // Pagination parameters
   const paginationParams: GetAllComponentsPagedParams = {
-    searchTerm: searchTerm.trim() || undefined,
+    searchTerm: expandedSearchTerm,
     brand: filters.brand.trim() || undefined,
     compatibilityTag: filters.compatibilityTag.trim() || undefined,
     maxPrice: filters.maxPrice ? parseFloat(filters.maxPrice) : undefined,
@@ -222,7 +242,7 @@ const ComponentCatalog: React.FC = () => {
   };
 
   const typePaginationParams: GetComponentsByTypePagedParams = {
-    searchTerm: searchTerm.trim() || undefined,
+    searchTerm: expandedSearchTerm,
     brand: filters.brand.trim() || undefined,
     compatibilityTag: filters.compatibilityTag.trim() || undefined,
     maxPrice: filters.maxPrice ? parseFloat(filters.maxPrice) : undefined,
@@ -234,6 +254,7 @@ const ComponentCatalog: React.FC = () => {
     sortDirection: "asc",
   };
 
+
   // Fetch all components (non-paginated - for backward compatibility)
   const {
     data: allComponents,
@@ -241,7 +262,7 @@ const ComponentCatalog: React.FC = () => {
     error: allComponentsError,
     refetch: refetchAll,
   } = useGetAllComponents({
-    query: { enabled: !usePagination },
+    query: { enabled: !usePagination && !slangDetectedType },
   });
 
   // Fetch all components (paginated)
@@ -251,15 +272,15 @@ const ComponentCatalog: React.FC = () => {
     error: allComponentsPagedError,
     refetch: refetchAllPaged,
   } = useGetAllComponentsPaged(paginationParams, {
-    query: { enabled: usePagination && !selectedType },
+    query: { enabled: usePagination && !selectedType && !slangDetectedType },
   });
 
 
   // Fetch components of selected type (non-paginated)
   const { data: typeComponents, error: typeError } = useGetComponentsByType(
-    selectedType as any,
+    (selectedType || slangDetectedType) as any,
     {
-      query: { enabled: !usePagination && !!selectedType },
+      query: { enabled: !usePagination && (!!selectedType || !!slangDetectedType) },
     }
   );
 
@@ -269,38 +290,38 @@ const ComponentCatalog: React.FC = () => {
     isLoading: typeComponentsPagedLoading,
     error: typeComponentsPagedError,
     refetch: refetchTypePaged,
-  } = useGetComponentsByTypePaged(selectedType as any, typePaginationParams, {
-    query: { enabled: usePagination && !!selectedType },
+  } = useGetComponentsByTypePaged((selectedType || slangDetectedType) as any, typePaginationParams, {
+    query: { enabled: usePagination && (!!selectedType || !!slangDetectedType) },
   });
 
   // Determine which data source to use
   const isLoading = usePagination
-    ? selectedType
+    ? (selectedType || slangDetectedType)
       ? typeComponentsPagedLoading
       : allComponentsPagedLoading
-    : selectedType
+    : (selectedType || slangDetectedType)
     ? false
     : allComponentsLoading;
 
   const error = usePagination
-    ? selectedType
+    ? (selectedType || slangDetectedType)
       ? typeComponentsPagedError
       : allComponentsPagedError
-    : selectedType
+    : (selectedType || slangDetectedType)
     ? typeError
     : allComponentsError;
 
   const refetch = usePagination
-    ? selectedType
+    ? (selectedType || slangDetectedType)
       ? refetchTypePaged
       : refetchAllPaged
-    : selectedType
+    : (selectedType || slangDetectedType)
     ? () => {}
     : refetchAll;
 
   // Get current page data
   const currentPageData = usePagination
-    ? selectedType
+    ? (selectedType || slangDetectedType)
       ? typeComponentsPaged?.data
       : allComponentsPaged?.data
     : null;
@@ -322,22 +343,22 @@ const ComponentCatalog: React.FC = () => {
     // Determine which components to use
     if (usePagination) {
       // Use paginated data
-      if (selectedType && typeComponentsPaged?.data?.content) {
+      if ((selectedType || slangDetectedType) && typeComponentsPaged?.data?.content) {
         components = typeComponentsPaged.data.content;
       } else if (allComponentsPaged?.data?.content) {
         components = allComponentsPaged.data.content;
       }
     } else {
       // Use non-paginated data
-      if (selectedType && typeComponents?.data) {
+      if ((selectedType || slangDetectedType) && typeComponents?.data) {
         components = typeComponents.data;
       } else if (allComponents?.data) {
         components = allComponents.data;
       }
     }
 
-    // Apply search term filter
-    if (searchTerm.trim()) {
+    // Apply search term filter (only for non-slang terms when not using pagination)
+    if (searchTerm.trim() && !usePagination && !slangDetectedType) {
       const strategy = determineSearchStrategy(
         searchTerm,
         showFilters,
@@ -396,6 +417,7 @@ const ComponentCatalog: React.FC = () => {
     allComponents,
     typeComponents,
     selectedType,
+    slangDetectedType,
     searchTerm,
     filters,
     inStockOnly,
