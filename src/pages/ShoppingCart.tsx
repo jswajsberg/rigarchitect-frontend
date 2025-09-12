@@ -2,7 +2,7 @@
  * Shopping cart page for managing checkout items
  * @returns {JSX.Element} Shopping cart with item management and checkout functionality
  */
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSelectedUserId } from "../contexts/UserContext";
 import { useAuthMode } from "../contexts/AuthContext";
@@ -18,7 +18,7 @@ import {
   useGetItemsByCart,
   useClearCart,
 } from "../api/cart-item-controller/cart-item-controller";
-import { useGetAllComponents } from "../api/component-controller/component-controller";
+import { useSharedData } from "../contexts/SharedDataContext";
 import type { ComponentResponse, CartItemRequest } from "../api/model";
 import CheckoutModal from "../modals/CheckoutModal";
 import ConfirmModal from "../modals/ConfirmModal";
@@ -53,7 +53,7 @@ interface ShoppingCartProps {
   setActiveTab?: (tab: string) => void;
 }
 
-const ShoppingCart = ({ openAuthModal, setActiveTab }: ShoppingCartProps) => {
+const ShoppingCart = React.memo(({ openAuthModal, setActiveTab }: ShoppingCartProps) => {
   const queryClient = useQueryClient();
   const { isGuest } = useAuthMode();
   const selectedUserId = useSelectedUserId();
@@ -75,7 +75,7 @@ const ShoppingCart = ({ openAuthModal, setActiveTab }: ShoppingCartProps) => {
     query: { enabled: !!selectedUserId },
   });
 
-  const { data: allComponents } = useGetAllComponents();
+  const { allComponents } = useSharedData();
 
   // Mutations
   const createCartMutation = useCreateCartForUser();
@@ -607,7 +607,7 @@ const ShoppingCart = ({ openAuthModal, setActiveTab }: ShoppingCartProps) => {
               ) : (
                 <div className="space-y-4">
                   {cartItems.map((item) => {
-                    const component = allComponents?.data?.find(
+                    const component = allComponents?.find(
                       (c: ComponentResponse) => c.id === item.componentId
                     );
                     const iconConfig = getComponentTypeIcon(component?.type);
@@ -726,7 +726,7 @@ const ShoppingCart = ({ openAuthModal, setActiveTab }: ShoppingCartProps) => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="">Select a component...</option>
-                  {allComponents?.data
+                  {allComponents
                     ?.filter(
                       (c: ComponentResponse) =>
                         c.stockQuantity && c.stockQuantity > 0
@@ -913,6 +913,6 @@ const ShoppingCart = ({ openAuthModal, setActiveTab }: ShoppingCartProps) => {
       />
     </div>
   );
-};
+});
 
 export default ShoppingCart;

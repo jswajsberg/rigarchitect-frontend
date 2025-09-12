@@ -2,10 +2,11 @@
  * PC Builder page with templates, compatibility checking, and auto-save
  * @returns {JSX.Element} Full PC builder interface with component slots and suggestions
  */
-import React, { useState, useMemo, useCallback, useEffect } from "react";
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useSelectedUserId } from "../../contexts/UserContext";
 import { useNavigation } from "../../contexts/NavigationContext";
-import { useGetAllComponents } from "../../api/component-controller/component-controller";
+import { useSharedData } from "../../contexts/SharedDataContext";
 import { useCreateItem } from "../../api/cart-item-controller/cart-item-controller";
 import {
   useGetUserCarts,
@@ -49,16 +50,19 @@ import {
   ChevronLeft,
   ChevronRight,
   Wrench,
+  Share2,
+  Check,
 } from "lucide-react";
 
 interface PCBuilderProps {
   openAuthModal?: (mode?: "login" | "signup") => void;
 }
 
-const PCBuilder: React.FC<PCBuilderProps> = ({ openAuthModal }) => {
+const PCBuilder: React.FC<PCBuilderProps> = React.memo(({ openAuthModal }) => {
   const selectedUserId = useSelectedUserId();
   const { activeTab } = useNavigation();
-  const { data: allComponents } = useGetAllComponents();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { allComponents } = useSharedData();
   const createItemMutation = useCreateItem();
   const createCartMutation = useCreateCartForUser();
   const { user: authUser, isGuest, isAuthenticated } = useAuth();
@@ -87,6 +91,7 @@ const PCBuilder: React.FC<PCBuilderProps> = ({ openAuthModal }) => {
   const [showBuildNameModal, setShowBuildNameModal] = useState(false);
   const [hasAutoSelected, setHasAutoSelected] = useState(false);
   const [userExplicitlyCleared, setUserExplicitlyCleared] = useState(false);
+  const isManualSelectionRef = useRef(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
@@ -97,6 +102,7 @@ const PCBuilder: React.FC<PCBuilderProps> = ({ openAuthModal }) => {
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showGuestSignupPrompt, setShowGuestSignupPrompt] = useState(false);
+  const [justShared, setJustShared] = useState(false);
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const autoSaveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const templateTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
@@ -125,7 +131,7 @@ const PCBuilder: React.FC<PCBuilderProps> = ({ openAuthModal }) => {
     query: { enabled: !!selectedBuildId && isAuthenticated },
   });
 
-  const components = allComponents?.data || [];
+  const components = allComponents || [];
   
 
   // Create or maintain component snapshot for consistent template application
@@ -437,14 +443,30 @@ const PCBuilder: React.FC<PCBuilderProps> = ({ openAuthModal }) => {
     return () => window.removeEventListener("resize", checkScrollButtons);
   }, [checkScrollButtons]);
 
-  // Auto-select default build when builds are available
+  // Sync selectedBuildId with URL parameter on mount and URL changes
   useEffect(() => {
+    // Skip if this is a manual selection to prevent conflicts
+    if (isManualSelectionRef.current) return;
+    
+    const urlBuildId = searchParams.get('build');
+    if (urlBuildId && urlBuildId !== 'new' && savedBuilds.length > 0) {
+      const buildId = parseInt(urlBuildId);
+      const buildExists = savedBuilds.find(b => b.id === buildId);
+      if (buildExists && buildId !== selectedBuildId) {
+        handleLoadBuild(buildId, savedBuilds);
+        setHasAutoSelected(true);
+        return;
+      }
+    }
+    
+    // Auto-select default build when builds are available (only if no URL build specified)
     if (
       selectedUserId &&
       savedBuilds.length > 0 &&
       !selectedBuildId &&
       !hasAutoSelected &&
-      !userExplicitlyCleared
+      !userExplicitlyCleared &&
+      !urlBuildId
     ) {
       // Find the most recently updated build (or just the first one)
       const defaultBuild = savedBuilds.reduce((latest, current) => {
@@ -459,16 +481,20 @@ const PCBuilder: React.FC<PCBuilderProps> = ({ openAuthModal }) => {
       if (defaultBuild?.id) {
         handleLoadBuild(defaultBuild.id, savedBuilds);
         setHasAutoSelected(true);
+        // URL updates are handled by BuilderContext.setSelectedBuildId()
       }
     }
   }, [
     selectedUserId,
-    savedBuilds,
-    selectedBuildId,
+    savedBuilds.length, // Only watch length, not the array contents to prevent interference
     hasAutoSelected,
     userExplicitlyCleared,
     handleLoadBuild,
-  ]);
+    searchParams.get('build'), // Only watch the build parameter, not all searchParams
+  ]); // Removed selectedBuildId from dependencies to prevent conflict with manual selection
+
+  // Note: URL updates are handled by BuilderContext.setSelectedBuildId() 
+  // to avoid conflicts with navigation
 
   // Reset auto-selection flag when user changes or when no builds are available
   useEffect(() => {
@@ -487,14 +513,14 @@ const PCBuilder: React.FC<PCBuilderProps> = ({ openAuthModal }) => {
 
     if (
       selectedBuildItems?.data &&
-      allComponents?.data &&
+      allComponents &&
       selectedBuildId &&
       !userExplicitlyCleared
     ) {
       const buildSlots: BuildSlots = {};
 
       selectedBuildItems.data.forEach((item: CartItemResponse) => {
-        const component = allComponents.data.find(
+        const component = allComponents.find(
           (c: ComponentResponse) => c.id === item.componentId
         );
 
@@ -960,15 +986,64 @@ const PCBuilder: React.FC<PCBuilderProps> = ({ openAuthModal }) => {
     setShowClearConfirm
   ]);
 
+  // Share build functionality
+  const handleShareBuild = useCallback(async () => {
+    if (!selectedBuildId && !buildName.trim()) {
+      // If no saved build and no name, suggest saving first
+      setShowBuildNameModal(true);
+      return;
+    }
+
+    try {
+      const currentUrl = new URL(window.location.href);
+      
+      if (selectedBuildId) {
+        // Share existing saved build
+        currentUrl.searchParams.set('tab', 'builds');
+        currentUrl.searchParams.set('build', selectedBuildId.toString());
+      } else {
+        // For unsaved builds, could add functionality to save temporarily
+        // For now, just share the current build state without specific ID
+        currentUrl.searchParams.set('tab', 'builds');
+        currentUrl.searchParams.set('build', 'new');
+      }
+
+      await navigator.clipboard.writeText(currentUrl.toString());
+      
+      setJustShared(true);
+      setTimeout(() => setJustShared(false), 2000);
+      
+    } catch (error) {
+      console.error('Failed to copy build URL:', error);
+      // Fallback: show the URL in an alert
+      const currentUrl = new URL(window.location.href);
+      if (selectedBuildId) {
+        currentUrl.searchParams.set('tab', 'builds');
+        currentUrl.searchParams.set('build', selectedBuildId.toString());
+      } else {
+        currentUrl.searchParams.set('tab', 'builds');
+        currentUrl.searchParams.set('build', 'new');
+      }
+      alert(`Copy this URL to share your build:\n${currentUrl.toString()}`);
+    }
+  }, [selectedBuildId, buildName, setShowBuildNameModal]);
+
   // Enhanced build loading with proper state management
   const handleEnhancedLoadBuild = useCallback(
     (buildId: number) => {
       // Find the build being loaded
       const buildToLoad = savedBuilds.find((b) => b.id === buildId);
       if (buildToLoad) {
+        isManualSelectionRef.current = true; // Mark as manual selection
         handleLoadBuild(buildId, savedBuilds);
         setSelectedTemplateId(""); // Clear template selection when loading a saved build
         setIsUsingTemplate(false); // Reset template flag when loading saved build
+        // URL updates are handled by BuilderContext.setSelectedBuildId()
+        
+        // Reset manual selection flag after a short delay
+        setTimeout(() => {
+          isManualSelectionRef.current = false;
+        }, 100);
       }
     },
     [savedBuilds, handleLoadBuild]
@@ -1038,6 +1113,31 @@ const PCBuilder: React.FC<PCBuilderProps> = ({ openAuthModal }) => {
                     {hasUnsavedChanges ? "● " : ""}{isModifyingExisting ? "Update Build" : "Save Build"}
                   </button>
                 )}
+                
+                {/* Share Build Button - Show when there's a build to share */}
+                {(Object.keys(currentBuild).length > 0 || selectedBuildId) && (
+                  <button
+                    onClick={handleShareBuild}
+                    className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                      justShared
+                        ? "bg-green-600 text-white"
+                        : "bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300"
+                    }`}
+                    title={selectedBuildId ? "Share this saved build" : "Share current build (save first for permanent link)"}
+                  >
+                    {justShared ? (
+                      <>
+                        <Check size={16} className="inline mr-2" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Share2 size={16} className="inline mr-2" />
+                        Share
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             )}
 
@@ -1049,6 +1149,29 @@ const PCBuilder: React.FC<PCBuilderProps> = ({ openAuthModal }) => {
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
                 >
                   💾 Save Build
+                </button>
+                
+                {/* Share Build Button for Guests */}
+                <button
+                  onClick={handleShareBuild}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                    justShared
+                      ? "bg-green-600 text-white"
+                      : "bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300"
+                  }`}
+                  title="Share your current build configuration"
+                >
+                  {justShared ? (
+                    <>
+                      <Check size={16} className="inline mr-2" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Share2 size={16} className="inline mr-2" />
+                      Share
+                    </>
+                  )}
                 </button>
               </div>
             )}
@@ -1653,7 +1776,7 @@ const PCBuilder: React.FC<PCBuilderProps> = ({ openAuthModal }) => {
               )}
 
               {/* New Build Guidance */}
-              {Object.keys(currentBuild).length === 0 && !isUsingTemplate && selectedBuildId && (
+              {Object.keys(currentBuild).length === 0 && !isUsingTemplate && (isGuest || selectedBuildId) && (
                 <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <div className="flex items-start gap-3">
                     <Lightbulb className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
@@ -1857,6 +1980,6 @@ const PCBuilder: React.FC<PCBuilderProps> = ({ openAuthModal }) => {
       />
     </>
   );
-};
+});
 
 export default PCBuilder;

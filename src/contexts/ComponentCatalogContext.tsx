@@ -8,8 +8,10 @@ import {
   useContext,
   useState,
   useEffect,
+  useRef,
   type ReactNode,
 } from "react";
+import { useSearchParams } from "react-router-dom";
 import type { SearchFilters } from "../components/SearchBar";
 
 export interface ComponentCatalogState {
@@ -68,25 +70,99 @@ const defaultState: ComponentCatalogState = {
 export const ComponentCatalogProvider: React.FC<ComponentCatalogProviderProps> = ({
   children,
 }) => {
-  // Initialize state with persisted value or fallback to defaults
-  const [catalogState, setCatalogState] = useState<ComponentCatalogState>(() => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const isInitializingRef = useRef(true);
+
+  // Initialize state from URL parameters or fallback to defaults
+  const getInitialState = (): ComponentCatalogState => {
+    const urlSearchTerm = searchParams.get('search') || '';
+    const urlSelectedType = searchParams.get('type') || null;
+    const urlPageParam = searchParams.get('page');
+    const urlCurrentPage = urlPageParam ? Math.max(0, parseInt(urlPageParam) - 1) : 0;
+    const urlUsePagination = searchParams.get('paginated') === 'true';
+    const urlInStockOnly = searchParams.get('inStock') === 'true';
+    const urlShowFilters = searchParams.get('filters') === 'true';
+
+    // Get filters from URL
+    const urlFilters: SearchFilters = {
+      type: searchParams.get('filterType') || '',
+      brand: searchParams.get('brand') || '',
+      compatibilityTag: searchParams.get('compatibility') || '',
+      maxPrice: searchParams.get('maxPrice') || '',
+      minStock: searchParams.get('minStock') || '0',
+    };
+
+    // Check if there are any filter values present
+    const hasFilterValues = urlFilters.type || urlFilters.brand || urlFilters.compatibilityTag || 
+                          urlFilters.maxPrice || (urlFilters.minStock && urlFilters.minStock !== '0');
+
+    // Auto-open filters panel if filter values are present or explicitly requested
+    const shouldShowFilters = urlShowFilters || hasFilterValues;
+
+    // If URL has parameters, use them
+    if (urlSearchTerm || urlSelectedType || urlPageParam || urlUsePagination || urlInStockOnly || shouldShowFilters) {
+      return {
+        searchTerm: urlSearchTerm,
+        showFilters: shouldShowFilters,
+        selectedType: urlSelectedType,
+        filters: urlFilters,
+        inStockOnly: urlInStockOnly,
+        currentPage: urlCurrentPage,
+        usePagination: searchParams.has('paginated') ? urlUsePagination : true, // Use URL value if present, otherwise default to true
+      };
+    }
+
+    // Fallback to localStorage if no URL params
     if (typeof window !== "undefined") {
       try {
         const stored = localStorage.getItem(CATALOG_STATE_STORAGE_KEY);
         if (stored) {
           const parsedState = JSON.parse(stored);
-          // Merge with defaults to handle new properties in updates
           return { ...defaultState, ...parsedState };
         }
       } catch (error) {
         console.warn("Failed to load persisted catalog state:", error);
       }
     }
-    return defaultState;
-  });
 
-  // Persist state changes to localStorage
+    return defaultState;
+  };
+
+  const [catalogState, setCatalogState] = useState<ComponentCatalogState>(getInitialState);
+
+  // Update URL parameters when state changes
+  const updateURLParams = (newState: ComponentCatalogState) => {
+    const newSearchParams = new URLSearchParams();
+    
+    // Only keep the tab parameter from existing params
+    const currentTab = searchParams.get('tab');
+    if (currentTab) {
+      newSearchParams.set('tab', currentTab);
+    }
+
+    // Add catalog parameters only if they differ from defaults
+    if (newState.searchTerm) newSearchParams.set('search', newState.searchTerm);
+    if (newState.selectedType) newSearchParams.set('type', newState.selectedType);
+    if (newState.currentPage >= 0) newSearchParams.set('page', (newState.currentPage + 1).toString());
+    if (!newState.usePagination) newSearchParams.set('paginated', 'false');
+    if (newState.inStockOnly) newSearchParams.set('inStock', 'true');
+    if (newState.showFilters) newSearchParams.set('filters', 'true');
+    
+    // Add filter parameters
+    if (newState.filters.type) newSearchParams.set('filterType', newState.filters.type);
+    if (newState.filters.brand) newSearchParams.set('brand', newState.filters.brand);
+    if (newState.filters.compatibilityTag) newSearchParams.set('compatibility', newState.filters.compatibilityTag);
+    if (newState.filters.maxPrice) newSearchParams.set('maxPrice', newState.filters.maxPrice);
+    if (newState.filters.minStock && newState.filters.minStock !== '0') newSearchParams.set('minStock', newState.filters.minStock);
+
+    setSearchParams(newSearchParams, { replace: true });
+  };
+
+  // Persist state changes to localStorage and URL
   const persistState = (newState: ComponentCatalogState) => {
+    updateURLParams(newState);
+    
+    // Also persist to localStorage as backup
     if (typeof window !== "undefined") {
       try {
         localStorage.setItem(CATALOG_STATE_STORAGE_KEY, JSON.stringify(newState));
@@ -98,27 +174,15 @@ export const ComponentCatalogProvider: React.FC<ComponentCatalogProviderProps> =
 
   // Individual setters that update specific parts of the state
   const setSearchTerm = (searchTerm: string) => {
-    setCatalogState(prevState => {
-      const newState = { ...prevState, searchTerm };
-      persistState(newState);
-      return newState;
-    });
+    setCatalogState(prevState => ({ ...prevState, searchTerm }));
   };
 
   const setShowFilters = (showFilters: boolean) => {
-    setCatalogState(prevState => {
-      const newState = { ...prevState, showFilters };
-      persistState(newState);
-      return newState;
-    });
+    setCatalogState(prevState => ({ ...prevState, showFilters }));
   };
 
   const setSelectedType = (selectedType: string | null) => {
-    setCatalogState(prevState => {
-      const newState = { ...prevState, selectedType };
-      persistState(newState);
-      return newState;
-    });
+    setCatalogState(prevState => ({ ...prevState, selectedType }));
   };
 
   const setFilters = (filtersOrUpdater: SearchFilters | ((prev: SearchFilters) => SearchFilters)) => {
@@ -126,34 +190,20 @@ export const ComponentCatalogProvider: React.FC<ComponentCatalogProviderProps> =
       const newFilters = typeof filtersOrUpdater === 'function' 
         ? filtersOrUpdater(prevState.filters)
         : filtersOrUpdater;
-      const newState = { ...prevState, filters: newFilters };
-      persistState(newState);
-      return newState;
+      return { ...prevState, filters: newFilters };
     });
   };
 
   const setInStockOnly = (inStockOnly: boolean) => {
-    setCatalogState(prevState => {
-      const newState = { ...prevState, inStockOnly };
-      persistState(newState);
-      return newState;
-    });
+    setCatalogState(prevState => ({ ...prevState, inStockOnly }));
   };
 
   const setCurrentPage = (currentPage: number) => {
-    setCatalogState(prevState => {
-      const newState = { ...prevState, currentPage };
-      persistState(newState);
-      return newState;
-    });
+    setCatalogState(prevState => ({ ...prevState, currentPage }));
   };
 
   const setUsePagination = (usePagination: boolean) => {
-    setCatalogState(prevState => {
-      const newState = { ...prevState, usePagination };
-      persistState(newState);
-      return newState;
-    });
+    setCatalogState(prevState => ({ ...prevState, usePagination }));
   };
 
   // Helper functions
@@ -162,19 +212,43 @@ export const ComponentCatalogProvider: React.FC<ComponentCatalogProviderProps> =
   };
 
   const clearAllFilters = () => {
-    setCatalogState(prevState => {
-      const newState = {
-        ...prevState,
-        searchTerm: "",
-        selectedType: null,
-        filters: defaultFilters,
-        inStockOnly: false,
-        currentPage: 0,
-      };
-      persistState(newState);
-      return newState;
-    });
+    setCatalogState(prevState => ({
+      ...prevState,
+      searchTerm: "",
+      showFilters: false,
+      selectedType: null,
+      filters: defaultFilters,
+      inStockOnly: false,
+      currentPage: 0,
+    }));
   };
+
+  // Update URL and localStorage when state changes (but not during initialization)
+  useEffect(() => {
+    if (!isInitializingRef.current) {
+      // Debounce the persist operation to prevent rapid URL updates
+      const timeoutId = setTimeout(() => {
+        persistState(catalogState);
+      }, 100); // 100ms debounce
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [catalogState]);
+
+  // Sync with URL changes (browser back/forward) - only for component tab
+  useEffect(() => {
+    const currentTab = searchParams.get('tab');
+    // Only update state when switching TO the components tab or when already on it
+    if (currentTab === 'components') {
+      const newState = getInitialState();
+      // Only update state if it's actually different to prevent unnecessary renders
+      const stateChanged = JSON.stringify(newState) !== JSON.stringify(catalogState);
+      if (stateChanged) {
+        setCatalogState(newState);
+      }
+    }
+    isInitializingRef.current = false;
+  }, [searchParams.get('tab')]); // Only watch the tab parameter specifically
 
   // Cleanup effect for storage management
   useEffect(() => {

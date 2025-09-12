@@ -6,7 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useSelectedUserId, useSelectedUser } from "../contexts/UserContext";
 import { useFinalizeCart } from "../api/build-cart-controller/build-cart-controller";
 import { useGetItemsByCart } from "../api/cart-item-controller/cart-item-controller";
-import { useGetAllComponents } from "../api/component-controller/component-controller";
+import { useSharedData } from "../contexts/SharedDataContext";
 import type { BuildCartResponse, ComponentResponse } from "../api/model";
 
 // Quebec and Canada tax rates (2024)
@@ -33,7 +33,7 @@ const CheckoutModal = ({ isOpen, onClose, cart }: CheckoutModalProps) => {
   const [checkoutProcessing, setCheckoutProcessing] = useState(false);
   const [checkoutComplete, setCheckoutComplete] = useState(false);
 
-  const { data: allComponents } = useGetAllComponents();
+  const { allComponents } = useSharedData();
   const finalizeCartMutation = useFinalizeCart();
 
   // Get cart items
@@ -48,10 +48,10 @@ const CheckoutModal = ({ isOpen, onClose, cart }: CheckoutModalProps) => {
 
   // Enhanced cart items with component details
   const enhancedCartItems = useMemo(() => {
-    if (!allComponents?.data || !cartItems.length) return [];
+    if (!allComponents || !cartItems.length) return [];
 
     return cartItems.map((item) => {
-      const component = allComponents.data.find(
+      const component = allComponents.find(
         (c: ComponentResponse) => c.id === item.componentId
       );
 

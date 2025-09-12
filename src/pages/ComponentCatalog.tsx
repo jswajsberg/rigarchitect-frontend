@@ -10,11 +10,11 @@ import { useBuilder } from "../contexts/BuilderContext";
 import { useComponentCatalog } from "../contexts/ComponentCatalogContext";
 import { useGuestCart } from "../services/GuestCartService";
 import {
-  useGetAllComponents,
   useGetComponentsByType,
   useGetAllComponentsPaged,
   useGetComponentsByTypePaged,
 } from "../api/component-controller/component-controller";
+import { useSharedData } from "../contexts/SharedDataContext";
 import {
   useCreateItem,
   useDeleteItem,
@@ -53,7 +53,7 @@ import {
   Package, // For page title icon
 } from "lucide-react";
 
-const ComponentCatalog: React.FC = () => {
+const ComponentCatalog: React.FC = React.memo(() => {
   const selectedUserId = useSelectedUserId();
   const queryClient = useQueryClient();
   const { showToast } = useCart();
@@ -255,15 +255,12 @@ const ComponentCatalog: React.FC = () => {
   };
 
 
-  // Fetch all components (non-paginated - for backward compatibility)
-  const {
-    data: allComponents,
-    isLoading: allComponentsLoading,
-    error: allComponentsError,
-    refetch: refetchAll,
-  } = useGetAllComponents({
-    query: { enabled: !usePagination && !slangDetectedType },
-  });
+  // Get all components from shared context (non-paginated - for backward compatibility)
+  const { allComponents: sharedAllComponents, allComponentsLoading, allComponentsError } = useSharedData();
+  
+  // For non-paginated view, use shared data
+  const allComponents = { data: sharedAllComponents };
+  const refetchAll = () => {}; // Refetch handled by SharedDataContext
 
   // Fetch all components (paginated)
   const {
@@ -848,7 +845,13 @@ const ComponentCatalog: React.FC = () => {
   };
 
   const handleToggleFilters = () => {
-    setShowFilters(!showFilters);
+    if (showFilters) {
+      // When closing filters, clear all filters and reset pagination
+      clearAllFilters();
+    } else {
+      // When opening filters, just toggle the state
+      setShowFilters(true);
+    }
   };
 
   const handleFilterChange = (key: string, value: string) => {
@@ -1147,6 +1150,6 @@ const ComponentCatalog: React.FC = () => {
       )}
     </div>
   );
-};
+});
 
 export default ComponentCatalog;

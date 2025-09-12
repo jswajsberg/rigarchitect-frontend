@@ -2,12 +2,12 @@
  * Order history page displaying completed purchases with receipts
  * @returns {JSX.Element} Order history with expandable order details and print functionality
  */
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { useSelectedUserId } from "../contexts/UserContext";
 import { useNavigation } from "../contexts/NavigationContext";
 import { useGetUserCarts } from "../api/build-cart-controller/build-cart-controller";
 import { useGetItemsByCart } from "../api/cart-item-controller/cart-item-controller";
-import { useGetAllComponents } from "../api/component-controller/component-controller";
+import { useSharedData } from "../contexts/SharedDataContext";
 import type { BuildCartResponse, ComponentResponse } from "../api/model";
 import {
   Package, // Total Orders
@@ -35,7 +35,7 @@ import {
   User, // No user selected
 } from "lucide-react";
 
-const OrderHistory: React.FC = () => {
+const OrderHistory: React.FC = React.memo(() => {
   const selectedUserId = useSelectedUserId();
   const { setActiveTab } = useNavigation();
   const [expandedOrderId, setExpandedOrderId] = useState<number | null>(null);
@@ -49,7 +49,7 @@ const OrderHistory: React.FC = () => {
     query: { enabled: !!selectedUserId },
   });
 
-  const { data: allComponents } = useGetAllComponents();
+  const { allComponents } = useSharedData();
 
   // Get finalized orders (completed purchases)
   const orders = useMemo(() => {
@@ -245,7 +245,7 @@ const OrderHistory: React.FC = () => {
               order={order}
               isExpanded={expandedOrderId === order.id}
               onToggle={() => toggleOrderDetails(order.id!)}
-              allComponents={allComponents?.data || []}
+              allComponents={allComponents || []}
               getComponentTypeIcon={getComponentTypeIcon}
             />
           ))}
@@ -253,7 +253,7 @@ const OrderHistory: React.FC = () => {
       )}
     </div>
   );
-};
+});
 
 // Enhanced Order Card Component
 interface OrderCardProps {

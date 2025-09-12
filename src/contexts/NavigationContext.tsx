@@ -10,6 +10,7 @@ import {
   useEffect,
   type ReactNode,
 } from "react";
+import { useSearchParams, useNavigate } from "react-router-dom";
 
 interface NavigationContextType {
   activeTab: string;
@@ -38,8 +39,18 @@ const isValidTab = (tab: string): tab is ValidTab => {
 export const NavigationProvider: React.FC<NavigationProviderProps> = ({
   children,
 }) => {
-  // Initialize state with persisted value or fallback to cart
-  const [activeTab, setActiveTabState] = useState<string>(() => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+
+  // Get tab from URL or fallback to localStorage then default
+  const getInitialTab = (): string => {
+    // First priority: URL parameter
+    const urlTab = searchParams.get('tab');
+    if (urlTab && isValidTab(urlTab)) {
+      return urlTab;
+    }
+
+    // Second priority: localStorage
     if (typeof window !== "undefined") {
       try {
         const stored = localStorage.getItem(ACTIVE_TAB_STORAGE_KEY);
@@ -50,39 +61,80 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({
         console.warn("Failed to load persisted tab state:", error);
       }
     }
-    // Default fallback remains cart for first-time users
-    return "cart";
-  });
 
-  // Enhanced setActiveTab that persists the selection
+    // Default fallback
+    return "components";
+  };
+
+  const [activeTab, setActiveTabState] = useState<string>(getInitialTab);
+
+  // Enhanced setActiveTab that updates URL and persists the selection
   const setActiveTab = (tab: string) => {
     if (isValidTab(tab)) {
+      // Only update if tab is actually changing
+      if (tab === activeTab) return;
+      
       setActiveTabState(tab);
 
-      // Persist to localStorage for refresh retention
+      // Define tab-specific parameters that should be preserved
+      const tabParamMap: Record<string, string[]> = {
+        'components': ['search', 'type', 'page', 'paginated', 'inStock', 'filters', 'filterType', 'brand', 'compatibility', 'maxPrice', 'minStock'],
+        'builds': ['build', 'step', 'edit'],
+        'cart': ['view'],
+        'orders': ['filter', 'sort']
+      };
+
+      // Create clean URL with tab parameter
+      const newSearchParams = new URLSearchParams();
+      newSearchParams.set('tab', tab);
+
+      // Preserve parameters for the target tab
+      const preserveParams = tabParamMap[tab] || [];
+      preserveParams.forEach(param => {
+        const value = searchParams.get(param);
+        if (value) newSearchParams.set(param, value);
+      });
+
+      // Update URL immediately without requestAnimationFrame to prevent delay
+      setSearchParams(newSearchParams, { replace: true });
+
+      // Persist to localStorage
       if (typeof window !== "undefined") {
         try {
           localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tab);
         } catch (error) {
           console.warn("Failed to persist tab state:", error);
-          // Continue without persistence rather than breaking functionality
         }
       }
     } else {
-      console.warn(`Invalid tab attempted: ${tab}. Falling back to cart.`);
-      setActiveTabState("cart");
+      console.warn(`Invalid tab attempted: ${tab}. Falling back to components.`);
+      setActiveTab("components");
     }
   };
 
-  // Cleanup effect for storage management
+  // Sync with URL changes (browser back/forward)
   useEffect(() => {
-    // Validate stored tab on mount in case invalid data was manually set
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem(ACTIVE_TAB_STORAGE_KEY);
-      if (stored && !isValidTab(stored)) {
-        localStorage.removeItem(ACTIVE_TAB_STORAGE_KEY);
-        setActiveTabState("cart");
+    const urlTab = searchParams.get('tab');
+    if (urlTab && isValidTab(urlTab) && urlTab !== activeTab) {
+      setActiveTabState(urlTab);
+      // Also update localStorage
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, urlTab);
+        } catch (error) {
+          console.warn("Failed to persist tab state:", error);
+        }
       }
+    }
+  }, [searchParams, activeTab]);
+
+  // Set initial URL if no tab parameter exists
+  useEffect(() => {
+    const urlTab = searchParams.get('tab');
+    if (!urlTab) {
+      const newSearchParams = new URLSearchParams(searchParams);
+      newSearchParams.set('tab', activeTab);
+      setSearchParams(newSearchParams, { replace: true });
     }
   }, []);
 
