@@ -57,9 +57,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [selectedCartId, setSelectedCartId] = useState<number | null>(null);
 
-  // Fetch user carts
+  // Fetch user carts - only for authenticated users with valid selectedUserId
   const { data: userCarts } = useGetUserCarts(selectedUserId || 0, {
-    query: { enabled: !!selectedUserId },
+    query: { enabled: !!selectedUserId && selectedUserId > 0 },
   });
 
   const createCartMutation = useCreateCartForUser();
@@ -76,11 +76,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
   const shoppingCart =
     userCarts?.data?.find((cart) => cart.status === "DRAFT") || null;
 
-  // Fetch shopping cart items to get count
+  // Fetch shopping cart items to get count - only if we have a valid shopping cart
   const { data: shoppingCartItemsData } = useGetItemsByCart(
     shoppingCart?.id || 0,
     {
-      query: { enabled: !!shoppingCart?.id },
+      query: { enabled: !!shoppingCart?.id && !!selectedUserId && selectedUserId > 0 },
     }
   );
 

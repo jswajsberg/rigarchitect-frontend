@@ -9,7 +9,8 @@ import {
   saveBuild, 
   getBuildsBySession, 
   getLatestBuild, 
-  updateBuild 
+  updateBuild,
+  getBuild 
 } from '../api/guest/guest';
 import type { 
   GuestSessionResponse, 
@@ -105,7 +106,7 @@ class GuestService {
       };
 
       return this.session;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error ensuring valid session:', error);
       // Create new session if current one is invalid
       this.createNewSession();
@@ -188,7 +189,11 @@ class GuestService {
       
       const response = await getLatestBuild(this.getSessionId());
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
+      // 404 is expected when no builds exist for this guest session
+      if (error?.response?.status === 404) {
+        return null;
+      }
       console.error('Error getting latest build:', error);
       return null;
     }
@@ -272,6 +277,33 @@ class GuestService {
   getSessionForMigration(): string | null {
     return this.sessionId;
   }
+
+  /**
+   * Get a specific guest build by ID
+   * @param buildId The ID of the build to retrieve
+   * @returns Promise resolving to the build response or null if not found
+   */
+  async getBuildById(buildId: number): Promise<GuestBuildResponse | null> {
+    try {
+      const response = await getBuild(buildId);
+      return response.data;
+    } catch (error: any) {
+      if (error?.response?.status === 404) {
+        return null;
+      }
+      console.error('Error getting guest build by ID:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Reset guest session - useful for clearing stale sessions
+   */
+  resetGuestSession() {
+    this.clearSession();
+    this.createNewSession();
+    console.log('Guest session has been reset');
+  }
 }
 
 // Export singleton instance
@@ -297,11 +329,13 @@ export const useGuestBuilds = () => {
   const updateGuestBuild = (buildId: number, buildData: any) => guestService.updateBuild(buildId, buildData);
   const getGuestBuilds = () => guestService.getFormattedBuilds();
   const getLatestGuestBuild = () => guestService.getLatestBuild();
+  const getGuestBuildById = (buildId: number) => guestService.getBuildById(buildId);
 
   return {
     saveGuestBuild,
     updateGuestBuild,
     getGuestBuilds,
-    getLatestGuestBuild
+    getLatestGuestBuild,
+    getGuestBuildById
   };
 };

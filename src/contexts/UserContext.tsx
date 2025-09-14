@@ -14,7 +14,7 @@ import {
   useGetAllUsers,
   useGetCurrentUser,
 } from "../api/user-controller/user-controller";
-import { useAuth } from "./AuthContext";
+import { useAuth, useAuthMode } from "./AuthContext";
 import type { UserResponse } from "../api/model";
 
 interface UserContextType {
@@ -44,10 +44,11 @@ interface UserProviderProps {
 }
 
 export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
-  const { user: authUser, isAuthenticated } = useAuth();
+  const { user: authUser } = useAuth();
+  const { isAuthenticated } = useAuthMode();
   const [selectedUser, setSelectedUser] = useState<UserResponse | null>(null);
 
-  // Fetch all users for admin/selection features
+  // Fetch all users for admin/selection features - only if authenticated and has auth user
   const {
     data: allUsersData,
     isLoading: isLoadingUsers,
@@ -55,18 +56,20 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
     refetch: refetchUsers,
   } = useGetAllUsers({
     query: {
-      enabled: isAuthenticated, // Only fetch if authenticated
+      enabled: Boolean(isAuthenticated && authUser), // More stable condition
+      retry: false, // Don't retry on 401 errors
     },
   });
 
-  // Fetch current user (fallback for when auth user isn't available)
+  // Only fetch current user if we don't have auth user but are authenticated  
   const {
     data: currentUserData,
     isLoading: isLoadingCurrentUser,
     error: currentUserError,
   } = useGetCurrentUser({
     query: {
-      enabled: isAuthenticated && !authUser, // Only if authenticated but no auth user
+      enabled: Boolean(isAuthenticated && !authUser), // More stable condition
+      retry: false, // Don't retry on 401 errors
     },
   });
 

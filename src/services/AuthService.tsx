@@ -128,7 +128,13 @@ class AuthService {
       async (error) => {
         const originalRequest = error.config;
 
-        if (error.response?.status === 401 && !originalRequest._retry) {
+        // Only attempt refresh for authenticated endpoints
+        if (error.response?.status === 401 && 
+            !originalRequest._retry && 
+            !originalRequest.url?.includes('/api/v1/guest/') &&
+            !originalRequest.url?.includes('/api/v1/auth/login') &&
+            !originalRequest.url?.includes('/api/v1/auth/signup')) {
+          
           originalRequest._retry = true;
 
           try {
@@ -138,12 +144,20 @@ class AuthService {
               const newToken = this.getAccessToken();
               originalRequest.headers.Authorization = `Bearer ${newToken}`;
               return axios(originalRequest);
+            } else {
+              // Refresh failed - handle auth failure
+              this.handleAuthFailure();
             }
           } catch (refreshError) {
-            // Refresh failed - redirect to login
+            console.error("Token refresh error:", refreshError);
             this.handleAuthFailure();
             return Promise.reject(refreshError);
           }
+        }
+
+        // For guest endpoints that return 404, don't treat as auth error
+        if (error.response?.status === 404 && originalRequest.url?.includes('/api/v1/guest/')) {
+          console.warn(`Guest endpoint not found: ${originalRequest.url}`);
         }
 
         return Promise.reject(error);
@@ -157,7 +171,10 @@ class AuthService {
   async refreshAccessToken(): Promise<boolean> {
     try {
       const refreshToken = this.getRefreshToken();
-      if (!refreshToken) return false;
+      if (!refreshToken) {
+        console.warn("No refresh token available");
+        return false;
+      }
 
       const response = await authAPI.refreshToken(refreshToken);
       
@@ -168,8 +185,15 @@ class AuthService {
       });
 
       return true;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Token refresh failed:", error);
+      
+      // If refresh fails with 401, the refresh token is invalid
+      if (error.response?.status === 401) {
+        console.warn("Refresh token expired or invalid, clearing auth state");
+        this.clearAuth();
+      }
+      
       return false;
     }
   }

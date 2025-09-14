@@ -68,6 +68,9 @@ interface AuthContextType {
   initializeGuestMode: () => Promise<void>;
   migrateGuestToUser: () => Promise<{ success: boolean; error?: string }>;
 
+  // Profile update method
+  updateUserProfile: (userData: UserResponse) => Promise<{ success: boolean; error?: string }>;
+
   // JWT authentication methods
   refreshToken?: () => Promise<boolean>;
   getAuthHeaders?: () => Record<string, string>;
@@ -125,25 +128,42 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       // Check localStorage for existing session
       const storedAuth = localStorage.getItem("rigarchitect_auth");
-      if (storedAuth) {
+      const accessToken = authService.getAccessToken();
+      const refreshToken = authService.getRefreshToken();
+      
+      if (storedAuth && accessToken && refreshToken) {
         const authData = JSON.parse(storedAuth);
 
-        // JWT token validation would be performed here
-        // For now, just check if we have user data
+        // Check if we have valid user data and tokens
         if (authData.user && authData.user.id) {
-          setUser({ ...authData.user, isAuthenticated: true });
-          setIsGuest(false);
-          setIsLoading(false);
-          return;
+          // Check if token is expired
+          if (!authService.isTokenExpired()) {
+            setUser({ ...authData.user, isAuthenticated: true });
+            setIsGuest(false);
+            setIsLoading(false);
+            return;
+          } else {
+            // Try to refresh the token
+            const refreshed = await authService.refreshAccessToken();
+            if (refreshed) {
+              setUser({ ...authData.user, isAuthenticated: true });
+              setIsGuest(false);
+              setIsLoading(false);
+              return;
+            } else {
+              console.warn("Token refresh failed, clearing auth state");
+              clearAuthState();
+            }
+          }
         }
       }
 
-      // If no authenticated user, initialize guest mode
+      // If no authenticated user or token refresh failed, initialize guest mode
       await initializeGuestMode();
     } catch (error) {
       console.error("Error initializing auth:", error);
       // Clear corrupted auth data
-      localStorage.removeItem("rigarchitect_auth");
+      clearAuthState();
       // Fall back to guest mode
       await initializeGuestMode();
     }
@@ -162,10 +182,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const clearAuthState = () => {
     localStorage.removeItem("rigarchitect_auth");
-    // Clear JWT tokens
-    localStorage.removeItem("rigarchitect_access_token");
-    localStorage.removeItem("rigarchitect_refresh_token");
-    localStorage.removeItem("rigarchitect_token_expiry");
+    // Clear JWT tokens using AuthService
+    authService.clearAuth();
   };
 
   const initializeGuestMode = async () => {
@@ -258,11 +276,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Use JWT authentication
       const response = await authAPI.login(credentials.email, credentials.password);
       
-      // Store JWT tokens
-      if (response.accessToken && response.refreshToken) {
-        localStorage.setItem("rigarchitect_access_token", response.accessToken);
-        localStorage.setItem("rigarchitect_refresh_token", response.refreshToken);
-        localStorage.setItem("rigarchitect_token_expiry", response.expiresAt.toString());
+      // Store JWT tokens using AuthService
+      if (response.accessToken && response.refreshToken && response.expiresAt) {
+        authService.setTokens({
+          accessToken: response.accessToken,
+          refreshToken: response.refreshToken,
+          expiresAt: response.expiresAt
+        });
       }
 
       // Set authenticated user
@@ -314,11 +334,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         budget: userData.budget || 5000,
       });
 
-      // Store JWT tokens
-      if (response.accessToken && response.refreshToken) {
-        localStorage.setItem("rigarchitect_access_token", response.accessToken);
-        localStorage.setItem("rigarchitect_refresh_token", response.refreshToken);
-        localStorage.setItem("rigarchitect_token_expiry", response.expiresAt.toString());
+      // Store JWT tokens using AuthService
+      if (response.accessToken && response.refreshToken && response.expiresAt) {
+        authService.setTokens({
+          accessToken: response.accessToken,
+          refreshToken: response.refreshToken,
+          expiresAt: response.expiresAt
+        });
       }
 
       // Set authenticated user (auto-login after signup)
@@ -393,8 +415,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const logout = async () => {
+    try {
+      // Call logout API to invalidate tokens on server
+      await authAPI.logout();
+    } catch (error) {
+      console.error("Logout API call failed:", error);
+    }
+
     setUser(null);
     clearAuthState();
+    authService.clearAuth(); // Also clear tokens from AuthService
 
     // Clear all cached data
     queryClient.clear();
@@ -402,10 +432,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Clear guest cart to start fresh
     guestCartService.clearCart();
 
-    // Reinitialize guest mode after logout
-    await initializeGuestMode();
+    // Clear old guest session to avoid conflicts with migrated data
+    guestService.clearSession();
 
-    // Server-side token invalidation would occur here
+    // Reinitialize guest mode after logout with fresh session
+    await initializeGuestMode();
   };
 
 
@@ -423,6 +454,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return true;
   };
 
+  const updateUserProfile = async (userData: UserResponse): Promise<{ success: boolean; error?: string }> => {
+    try {
+      if (!user) {
+        return { success: false, error: "No user authenticated" };
+      }
+      
+      // Update the user state with the new data
+      const updatedUser: AuthUser = {
+        ...user,
+        ...userData,
+        isAuthenticated: true
+      };
+      
+      setUser(updatedUser);
+      console.log("AuthContext user updated:", updatedUser);
+      
+      return { success: true };
+    } catch (error: any) {
+      console.error("Failed to update user profile in context:", error);
+      return { success: false, error: error.message || "Failed to update profile" };
+    }
+  };
+
   const contextValue: AuthContextType = {
     user,
     isAuthenticated: !!user?.isAuthenticated,
@@ -435,6 +489,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Guest mode methods
     initializeGuestMode,
     migrateGuestToUser,
+    // Profile methods
+    updateUserProfile,
     // JWT methods
     getAuthHeaders,
     refreshToken,

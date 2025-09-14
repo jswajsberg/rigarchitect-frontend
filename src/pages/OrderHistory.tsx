@@ -46,7 +46,7 @@ const OrderHistory: React.FC = React.memo(() => {
     isLoading: cartsLoading,
     error: cartsError,
   } = useGetUserCarts(selectedUserId || 0, {
-    query: { enabled: !!selectedUserId },
+    query: { enabled: !!selectedUserId && selectedUserId > 0 },
   });
 
   const { allComponents } = useSharedData();

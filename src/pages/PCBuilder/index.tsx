@@ -15,7 +15,7 @@ import {
 import { useGetItemsByCart } from "../../api/cart-item-controller/cart-item-controller";
 import { useAuth } from "../../contexts/AuthContext";
 import { useGuestCart } from "../../services/GuestCartService";
-import { useGuestBuilds } from "../../services/GuestService";
+import { useGuestBuilds, guestService } from "../../services/GuestService";
 import type { ComponentResponse, CartItemResponse } from "../../api/model";
 import {
   checkBuildCompatibility,
@@ -71,7 +71,7 @@ const PCBuilder: React.FC<PCBuilderProps> = React.memo(({ openAuthModal }) => {
   const guestCart = useGuestCart();
   
   // Guest build functionality
-  const { saveGuestBuild, getLatestGuestBuild } = useGuestBuilds();
+  const { saveGuestBuild, getLatestGuestBuild, getGuestBuildById } = useGuestBuilds();
 
   // === Persistent builder state (from BuilderContext) ===
   const {
@@ -116,7 +116,7 @@ const PCBuilder: React.FC<PCBuilderProps> = React.memo(({ openAuthModal }) => {
 
   // Get saved builds (ACTIVE status) - conditional based on auth state
   const { data: userCarts } = useGetUserCarts(selectedUserId || 0, {
-    query: { enabled: !!selectedUserId && isAuthenticated },
+    query: { enabled: !!selectedUserId && selectedUserId > 0 && isAuthenticated && !isGuest },
   });
 
   const savedBuilds = useMemo(() => {
@@ -569,9 +569,38 @@ const PCBuilder: React.FC<PCBuilderProps> = React.memo(({ openAuthModal }) => {
     }
   }, [isGuest, currentBuild, buildName, saveGuestBuild]);
 
-  // Load latest guest build on mount
+  // Load shared guest build from URL parameter
   useEffect(() => {
-    if (isGuest && Object.keys(currentBuild).length === 0 && !userExplicitlyCleared) {
+    const guestBuildId = searchParams.get('guestBuild');
+    if (guestBuildId && !isNaN(parseInt(guestBuildId))) {
+      const loadSharedGuestBuild = async () => {
+        try {
+          const sharedBuild = await getGuestBuildById(parseInt(guestBuildId));
+          if (sharedBuild?.buildData) {
+            const buildData = JSON.parse(sharedBuild.buildData);
+            if (buildData.build && Object.keys(buildData.build).length > 0) {
+              setCurrentBuild(buildData.build);
+              if (buildData.buildName) {
+                setBuildName(buildData.buildName);
+              }
+              // Clear the URL parameter after loading
+              searchParams.delete('guestBuild');
+              setSearchParams(searchParams, { replace: true });
+            }
+          }
+        } catch (error) {
+          console.error('Failed to load shared guest build:', error);
+        }
+      };
+
+      loadSharedGuestBuild();
+    }
+  }, [searchParams, setSearchParams, getGuestBuildById, setCurrentBuild, setBuildName]);
+
+  // Load latest guest build on mount (only if no shared build is being loaded)
+  useEffect(() => {
+    const guestBuildId = searchParams.get('guestBuild');
+    if (isGuest && Object.keys(currentBuild).length === 0 && !userExplicitlyCleared && !guestBuildId) {
       const loadGuestBuild = async () => {
         try {
           const latestBuild = await getLatestGuestBuild();
@@ -594,7 +623,7 @@ const PCBuilder: React.FC<PCBuilderProps> = React.memo(({ openAuthModal }) => {
 
       loadGuestBuild();
     }
-  }, [isGuest, getLatestGuestBuild, setCurrentBuild, setBuildName, currentBuild, userExplicitlyCleared]);
+  }, [isGuest, getLatestGuestBuild, setCurrentBuild, setBuildName, currentBuild, userExplicitlyCleared, searchParams]);
 
   // Compatibility check
   const compatibility = useMemo(
@@ -988,45 +1017,78 @@ const PCBuilder: React.FC<PCBuilderProps> = React.memo(({ openAuthModal }) => {
 
   // Share build functionality
   const handleShareBuild = useCallback(async () => {
-    if (!selectedBuildId && !buildName.trim()) {
-      // If no saved build and no name, suggest saving first
-      setShowBuildNameModal(true);
-      return;
-    }
-
-    try {
-      const currentUrl = new URL(window.location.href);
-      
-      if (selectedBuildId) {
-        // Share existing saved build
-        currentUrl.searchParams.set('tab', 'builds');
-        currentUrl.searchParams.set('build', selectedBuildId.toString());
-      } else {
-        // For unsaved builds, could add functionality to save temporarily
-        // For now, just share the current build state without specific ID
-        currentUrl.searchParams.set('tab', 'builds');
-        currentUrl.searchParams.set('build', 'new');
+    if (isGuest) {
+      // For guests, we need to save the build first to get a shareable ID
+      if (Object.keys(currentBuild).length === 0) {
+        alert('No build to share! Add some components first.');
+        return;
       }
 
-      await navigator.clipboard.writeText(currentUrl.toString());
-      
-      setJustShared(true);
-      setTimeout(() => setJustShared(false), 2000);
-      
-    } catch (error) {
-      console.error('Failed to copy build URL:', error);
-      // Fallback: show the URL in an alert
-      const currentUrl = new URL(window.location.href);
-      if (selectedBuildId) {
+      try {
+        // Save the current build to get an ID
+        const buildData = {
+          build: currentBuild,
+          buildName: buildName || 'Shared Build',
+          timestamp: Date.now()
+        };
+        
+        const savedBuild = await saveGuestBuild(buildData);
+        
+        // Share using the guest build ID
+        const currentUrl = new URL(window.location.href);
         currentUrl.searchParams.set('tab', 'builds');
-        currentUrl.searchParams.set('build', selectedBuildId.toString());
-      } else {
-        currentUrl.searchParams.set('tab', 'builds');
-        currentUrl.searchParams.set('build', 'new');
+        currentUrl.searchParams.set('guestBuild', savedBuild.id.toString());
+        
+        await navigator.clipboard.writeText(currentUrl.toString());
+        
+        setJustShared(true);
+        setTimeout(() => setJustShared(false), 2000);
+        
+      } catch (error) {
+        console.error('Failed to save and share guest build:', error);
+        alert('Failed to create shareable link. Please try again.');
       }
-      alert(`Copy this URL to share your build:\n${currentUrl.toString()}`);
+    } else {
+      // Authenticated user logic
+      if (!selectedBuildId && !buildName.trim()) {
+        // If no saved build and no name, suggest saving first
+        setShowBuildNameModal(true);
+        return;
+      }
+
+      try {
+        const currentUrl = new URL(window.location.href);
+        
+        if (selectedBuildId) {
+          // Share existing saved build
+          currentUrl.searchParams.set('tab', 'builds');
+          currentUrl.searchParams.set('build', selectedBuildId.toString());
+        } else {
+          // For unsaved builds, could add functionality to save temporarily
+          currentUrl.searchParams.set('tab', 'builds');
+          currentUrl.searchParams.set('build', 'new');
+        }
+
+        await navigator.clipboard.writeText(currentUrl.toString());
+        
+        setJustShared(true);
+        setTimeout(() => setJustShared(false), 2000);
+        
+      } catch (error) {
+        console.error('Failed to copy build URL:', error);
+        // Fallback: show the URL in an alert
+        const currentUrl = new URL(window.location.href);
+        if (selectedBuildId) {
+          currentUrl.searchParams.set('tab', 'builds');
+          currentUrl.searchParams.set('build', selectedBuildId.toString());
+        } else {
+          currentUrl.searchParams.set('tab', 'builds');
+          currentUrl.searchParams.set('build', 'new');
+        }
+        alert(`Copy this URL to share your build:\n${currentUrl.toString()}`);
+      }
     }
-  }, [selectedBuildId, buildName, setShowBuildNameModal]);
+  }, [isGuest, currentBuild, buildName, saveGuestBuild, selectedBuildId, setShowBuildNameModal]);
 
   // Enhanced build loading with proper state management
   const handleEnhancedLoadBuild = useCallback(

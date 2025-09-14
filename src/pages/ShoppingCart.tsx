@@ -72,7 +72,7 @@ const ShoppingCart = React.memo(({ openAuthModal, setActiveTab }: ShoppingCartPr
     isLoading: cartsLoading,
     error: cartsError,
   } = useGetUserCarts(selectedUserId || 0, {
-    query: { enabled: !!selectedUserId },
+    query: { enabled: !!selectedUserId && selectedUserId > 0 && !isGuest },
   });
 
   const { allComponents } = useSharedData();
@@ -93,7 +93,7 @@ const ShoppingCart = React.memo(({ openAuthModal, setActiveTab }: ShoppingCartPr
   const { data: cartItemsData, isLoading: itemsLoading } = useGetItemsByCart(
     shoppingCart?.id || 0,
     {
-      query: { enabled: !!shoppingCart?.id },
+      query: { enabled: !!shoppingCart?.id && !!selectedUserId && selectedUserId > 0 && !isGuest },
     }
   );
 

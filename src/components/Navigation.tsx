@@ -1,9 +1,10 @@
 /**
  * Main navigation component with tab switching and user menu
  * @param {NavigationProps} props - Active tab state and setter function
- * @returns {JSX.Element} Navigation bar with tabs, budget controls, and user menu
+ * @returns {JSX.Element} Navigation bar with tabs, budget display, and user menu
  */
 import React, { useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth, useAuthMode } from "../contexts/AuthContext";
 import { useCart } from "../contexts/CartContext";
 import { useGuestCart } from "../services/GuestCartService";
@@ -29,6 +30,7 @@ import {
   Loader2, // Loading spinner
   AlertCircle, // Error icon
   CheckCircle2, // Success icon
+  Settings, // Profile/Settings
 } from "lucide-react";
 
 interface NavigationProps {
@@ -66,6 +68,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
       },
     },
   });
+
 
   // Enhanced tabs with professional Lucide icons - adjusted for guest vs authenticated
   const tabs = [
@@ -130,6 +133,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
     setIsEditingBudget(false);
     setBudgetInput("");
   };
+
 
   return (
     <nav className="bg-white shadow-lg border-b border-gray-200">
@@ -287,35 +291,17 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
                       </div>
                     </div>
 
-                    {/* Budget Section */}
-                    <div className="px-4 py-3 border-b border-gray-100">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <DollarSign size={16} className="text-green-600" />
-                          <span className="text-sm text-gray-600">
-                            Current Budget:
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-green-600">
-                            ${authUser.budget?.toFixed(2) || "0.00"}
-                          </span>
-                          <button
-                            onClick={() => {
-                              handleBudgetEdit();
-                              setShowUserMenu(false);
-                            }}
-                            className="p-1 text-gray-400 hover:text-gray-600 rounded"
-                            title="Edit budget"
-                          >
-                            <Edit3 size={14} />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
 
                     {/* Actions Section */}
                     <div className="py-2">
+                      <Link
+                        to="/profile"
+                        onClick={() => setShowUserMenu(false)}
+                        className="w-full flex items-center gap-3 px-4 py-2 text-left text-gray-700 hover:bg-gray-50 transition-colors"
+                      >
+                        <Settings size={16} className="text-gray-600" />
+                        <span className="text-sm">Account Settings</span>
+                      </Link>
                       <button
                         onClick={() => {
                           setShowChangePassword(true);

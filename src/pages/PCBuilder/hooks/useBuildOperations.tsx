@@ -47,7 +47,7 @@ export const useBuildOperations = ({
 
   // Get user carts to access shopping cart (DRAFT status)
   const { data: userCarts } = useGetUserCarts(selectedUserId || 0, {
-    query: { enabled: !!selectedUserId },
+    query: { enabled: !!selectedUserId && selectedUserId > 0 },
   });
 
   // Builder context

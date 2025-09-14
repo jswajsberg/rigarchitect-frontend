@@ -94,7 +94,7 @@ const ComponentCatalog: React.FC = React.memo(() => {
   const { data: userCarts, isLoading: buildsLoading } = useGetUserCarts(
     selectedUserId || 0,
     {
-      query: { enabled: !!selectedUserId },
+      query: { enabled: !!selectedUserId && selectedUserId > 0 },
     }
   );
 

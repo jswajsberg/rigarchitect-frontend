@@ -2,7 +2,7 @@
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 
 import { AuthProvider, useAuthMode } from "./contexts/AuthContext";
 import { UserProvider } from "./contexts/UserContext";
@@ -20,6 +20,7 @@ import ShoppingCart from "./pages/ShoppingCart";
 import ComponentCatalog from "./pages/ComponentCatalog";
 import OrderHistory from "./pages/OrderHistory";
 import PCBuilder from "./pages/PCBuilder";
+import UserProfileModal from "./modals/UserProfileModal";
 import AuthModal from "./modals/AuthModal";
 
 // Create a client
@@ -37,8 +38,12 @@ const queryClient = new QueryClient({
 const AppContent = React.memo(() => {
   const { activeTab, setActiveTab } = useNavigation();
   const { mode } = useAuthMode();
+  const location = useLocation();
   const [showAuthModal, setShowAuthModal] = React.useState(false);
   const [authModalMode, setAuthModalMode] = React.useState<"login" | "signup">("login");
+  
+  // Check if profile modal should be open based on URL
+  const isProfileModalOpen = location.pathname === '/profile';
 
   // Function to open auth modal - will be passed down to components that need it
   const openAuthModal = (mode: "login" | "signup" = "signup") => {
@@ -125,6 +130,12 @@ const AppContent = React.memo(() => {
         onSuccess={() => {
           // Optional: Handle successful authentication
         }}
+      />
+      
+      {/* User Profile Modal - controlled by URL routing */}
+      <UserProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => {}}
       />
     </div>
   );

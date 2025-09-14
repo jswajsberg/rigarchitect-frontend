@@ -63,7 +63,7 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({
     }
 
     // Default fallback
-    return "components";
+    return "builds";
   };
 
   const [activeTab, setActiveTabState] = useState<string>(getInitialTab);
@@ -112,7 +112,7 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({
     }
   };
 
-  // Sync with URL changes (browser back/forward)
+  // Sync with URL changes (browser back/forward) - prevent feedback loop
   useEffect(() => {
     const urlTab = searchParams.get('tab');
     if (urlTab && isValidTab(urlTab) && urlTab !== activeTab) {
@@ -126,9 +126,9 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({
         }
       }
     }
-  }, [searchParams, activeTab]);
+  }, [searchParams]); // Remove activeTab dependency to prevent feedback loop
 
-  // Set initial URL if no tab parameter exists
+  // Set initial URL if no tab parameter exists - run once on mount
   useEffect(() => {
     const urlTab = searchParams.get('tab');
     if (!urlTab) {
@@ -136,7 +136,8 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({
       newSearchParams.set('tab', activeTab);
       setSearchParams(newSearchParams, { replace: true });
     }
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Keep empty dependency array to run only once on mount
 
   return (
     <NavigationContext.Provider value={{ activeTab, setActiveTab }}>
