@@ -15,7 +15,7 @@ import {
 import { useGetItemsByCart } from "../../api/cart-item-controller/cart-item-controller";
 import { useAuth } from "../../contexts/AuthContext";
 import { useGuestCart } from "../../services/GuestCartService";
-import { useGuestBuilds, guestService } from "../../services/GuestService";
+import { useGuestBuilds } from "../../services/GuestService";
 import type { ComponentResponse, CartItemResponse } from "../../api/model";
 import {
   checkBuildCompatibility,
@@ -92,6 +92,7 @@ const PCBuilder: React.FC<PCBuilderProps> = React.memo(({ openAuthModal }) => {
   const [hasAutoSelected, setHasAutoSelected] = useState(false);
   const [userExplicitlyCleared, setUserExplicitlyCleared] = useState(false);
   const isManualSelectionRef = useRef(false);
+  const autoSelectionAttemptedRef = useRef(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
@@ -459,14 +460,18 @@ const PCBuilder: React.FC<PCBuilderProps> = React.memo(({ openAuthModal }) => {
       }
     }
     
-    // Auto-select default build when builds are available (only if no URL build specified)
+    // Auto-select most recent build when builds are available (only if no URL build specified)
+    // This should happen immediately when user logs in and visits PC Builder
+    // Only auto-select if user has no active selection (neither build nor template)
     if (
       selectedUserId &&
       savedBuilds.length > 0 &&
       !selectedBuildId &&
+      !isUsingTemplate &&
       !hasAutoSelected &&
       !userExplicitlyCleared &&
-      !urlBuildId
+      !urlBuildId &&
+      !autoSelectionAttemptedRef.current // Only try auto-selection once per session
     ) {
       // Find the most recently updated build (or just the first one)
       const defaultBuild = savedBuilds.reduce((latest, current) => {
@@ -479,18 +484,28 @@ const PCBuilder: React.FC<PCBuilderProps> = React.memo(({ openAuthModal }) => {
       });
 
       if (defaultBuild?.id) {
+        // Mark that we attempted auto-selection
+        autoSelectionAttemptedRef.current = true;
+
+        // Clear any template selection before loading the build
+        setSelectedTemplateId("");
+        setIsUsingTemplate(false);
+
         handleLoadBuild(defaultBuild.id, savedBuilds);
         setHasAutoSelected(true);
-        // URL updates are handled by BuilderContext.setSelectedBuildId()
       }
+    } else if (savedBuilds.length > 0 && !selectedBuildId && !isUsingTemplate && !autoSelectionAttemptedRef.current) {
+      // Mark that we attempted auto-selection even if conditions weren't met
+      autoSelectionAttemptedRef.current = true;
     }
   }, [
     selectedUserId,
-    savedBuilds.length, // Only watch length, not the array contents to prevent interference
+    savedBuilds.length, // Only watch length to trigger when builds first load
     hasAutoSelected,
     userExplicitlyCleared,
     handleLoadBuild,
-    searchParams.get('build'), // Only watch the build parameter, not all searchParams
+    // Removed searchParams dependency to prevent infinite loops from URL updates
+    // Removed isUsingTemplate dependency to allow auto-selection on login
   ]); // Removed selectedBuildId from dependencies to prevent conflict with manual selection
 
   // Note: URL updates are handled by BuilderContext.setSelectedBuildId() 
@@ -499,10 +514,29 @@ const PCBuilder: React.FC<PCBuilderProps> = React.memo(({ openAuthModal }) => {
   // Reset auto-selection flag when user changes or when no builds are available
   useEffect(() => {
     if ((!selectedUserId && !isGuest) || savedBuilds.length === 0) {
+      // Clear all build selection state when signing out or no builds available
       setHasAutoSelected(false);
       setUserExplicitlyCleared(false);
+      autoSelectionAttemptedRef.current = false; // Reset attempt flag for new user
     }
   }, [selectedUserId, isGuest, savedBuilds.length]);
+
+  // Track previous tab to detect when returning to builds
+  const previousTabRef = useRef(activeTab);
+  useEffect(() => {
+    const wasOnDifferentTab = previousTabRef.current !== 'builds';
+    const isNowOnBuildsTab = activeTab === 'builds';
+    const hasNoActiveSelection = !selectedBuildId && !isUsingTemplate;
+
+    if (wasOnDifferentTab && isNowOnBuildsTab && selectedUserId && savedBuilds.length > 0 && hasNoActiveSelection) {
+      // User just navigated back to builds tab with no build or template selection - allow auto-selection again
+      autoSelectionAttemptedRef.current = false;
+      setHasAutoSelected(false);
+    }
+
+    // Update the ref for next time
+    previousTabRef.current = activeTab;
+  }, [activeTab, selectedUserId, savedBuilds.length, selectedBuildId, isUsingTemplate]);
 
   // Load components when build is selected (template operations are excluded)
   useEffect(() => {
@@ -600,30 +634,34 @@ const PCBuilder: React.FC<PCBuilderProps> = React.memo(({ openAuthModal }) => {
   // Load latest guest build on mount (only if no shared build is being loaded)
   useEffect(() => {
     const guestBuildId = searchParams.get('guestBuild');
-    if (isGuest && Object.keys(currentBuild).length === 0 && !userExplicitlyCleared && !guestBuildId) {
-      const loadGuestBuild = async () => {
-        try {
-          const latestBuild = await getLatestGuestBuild();
-          if (latestBuild?.buildData) {
-            const buildData = JSON.parse(latestBuild.buildData);
-            if (buildData.build && Object.keys(buildData.build).length > 0) {
-              setCurrentBuild(buildData.build);
-              if (buildData.buildName) {
-                setBuildName(buildData.buildName);
+
+    // Only try to load guest builds if we're on the PC Builder tab and not during initial transitions
+    if (isGuest && activeTab === 'pcbuilder' && Object.keys(currentBuild).length === 0 && !userExplicitlyCleared && !guestBuildId) {
+      // Add a delay to allow component to stabilize and ensure we're actually staying on this tab
+      const timeoutId = setTimeout(async () => {
+        // Double-check we're still on PC Builder tab and still a guest
+        if (isGuest && activeTab === 'pcbuilder') {
+          try {
+            const latestBuild = await getLatestGuestBuild();
+            if (latestBuild?.buildData) {
+              const buildData = JSON.parse(latestBuild.buildData);
+              if (buildData.build && Object.keys(buildData.build).length > 0) {
+                setCurrentBuild(buildData.build);
+                if (buildData.buildName) {
+                  setBuildName(buildData.buildName);
+                }
               }
             }
-          }
-        } catch (error) {
-          // Ignore 404 errors - it just means no builds exist yet for this guest
-          if (error?.response?.status !== 404) {
-            console.error('Failed to load guest build:', error);
+          } catch (error: any) {
+            // Silently ignore all errors when loading guest builds
+            // 404 errors are normal for new guest sessions
           }
         }
-      };
+      }, 1000); // Longer delay to ensure user is actually staying on PC Builder
 
-      loadGuestBuild();
+      return () => clearTimeout(timeoutId);
     }
-  }, [isGuest, getLatestGuestBuild, setCurrentBuild, setBuildName, currentBuild, userExplicitlyCleared, searchParams]);
+  }, [isGuest, activeTab, getLatestGuestBuild, setCurrentBuild, setBuildName, currentBuild, userExplicitlyCleared, searchParams]);
 
   // Compatibility check
   const compatibility = useMemo(
@@ -777,6 +815,7 @@ const PCBuilder: React.FC<PCBuilderProps> = React.memo(({ openAuthModal }) => {
     setShowClearConfirm(false);
   }, [setCurrentBuild, setBuildName, setShowClearConfirm, clearComponentSnapshot, saveGuestBuild]);
 
+
   // Handler assignments using useMemo to avoid hoisting issues
   const handleSaveBuild = useMemo(() => {
     const saveFn = isGuest ? handleGuestSaveBuild : buildOps.handleSaveBuild;
@@ -887,7 +926,7 @@ const PCBuilder: React.FC<PCBuilderProps> = React.memo(({ openAuthModal }) => {
       const consistentComponents = getComponentSnapshot();
 
       // Apply the new template (this is synchronous)
-      const { suggestedBuild, missingComponents, budgetWarnings } =
+      const { suggestedBuild, missingComponents } =
         applyBuildTemplate(template, consistentComponents);
 
       // Final generation check before setting any state
@@ -913,7 +952,12 @@ const PCBuilder: React.FC<PCBuilderProps> = React.memo(({ openAuthModal }) => {
         // Triple-check generation one more time inside the transition
         if (templateGenerationRef.current === generation) {
           setCurrentBuild(cleanBuild);
-          setPriceRange(template.targetPrice);
+          // Respect user's budget as the maximum limit when setting price range from template
+          const userBudget = authUser?.budget || 5000;
+          setPriceRange({
+            min: Math.max(0, template.targetPrice.min),
+            max: Math.min(template.targetPrice.max, userBudget),
+          });
           setBuildName(String(template.name || "Template Build").trim());
           setMissingComponentsInfo(missingComponents);
           setIsUsingTemplate(true);
@@ -921,8 +965,6 @@ const PCBuilder: React.FC<PCBuilderProps> = React.memo(({ openAuthModal }) => {
           setSelectedBuildId(null);
           setIsModifyingExisting(false);
           setUserExplicitlyCleared(false);
-          
-        } else {
         }
       });
 
@@ -938,6 +980,7 @@ const PCBuilder: React.FC<PCBuilderProps> = React.memo(({ openAuthModal }) => {
       setBuildName,
       setIsModifyingExisting,
       setSelectedBuildId,
+      authUser,
     ]
   );
 
@@ -968,7 +1011,6 @@ const PCBuilder: React.FC<PCBuilderProps> = React.memo(({ openAuthModal }) => {
           // Only proceed if this generation is still current
           if (templateGenerationRef.current === currentGeneration) {
             applyTemplateInternal(templateId, currentGeneration);
-          } else {
           }
           templateTimeoutRef.current = null;
         }, 500); // Increased from 100ms to 500ms to better handle rapid clicks
@@ -1037,7 +1079,7 @@ const PCBuilder: React.FC<PCBuilderProps> = React.memo(({ openAuthModal }) => {
         // Share using the guest build ID
         const currentUrl = new URL(window.location.href);
         currentUrl.searchParams.set('tab', 'builds');
-        currentUrl.searchParams.set('guestBuild', savedBuild.id.toString());
+        currentUrl.searchParams.set('guestBuild', savedBuild.id!.toString());
         
         await navigator.clipboard.writeText(currentUrl.toString());
         
@@ -1122,8 +1164,11 @@ const PCBuilder: React.FC<PCBuilderProps> = React.memo(({ openAuthModal }) => {
     );
   }
 
+  // Use a key that changes when user signs out to force component remount
+  const componentKey = isAuthenticated ? `authenticated-${selectedUserId}` : 'signed-out';
+
   return (
-    <>
+    <div key={componentKey}>
       <div className="p-6 max-w-7xl mx-auto">
         {/* Header with Build Loader */}
         <div className="mb-6">
@@ -2040,7 +2085,7 @@ const PCBuilder: React.FC<PCBuilderProps> = React.memo(({ openAuthModal }) => {
         cancelText="Continue Building"
         variant="info"
       />
-    </>
+    </div>
   );
 });
 

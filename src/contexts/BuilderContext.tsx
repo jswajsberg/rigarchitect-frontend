@@ -4,14 +4,14 @@
  */
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useAuth } from "./AuthContext";
+import { useAuth, useAuthMode } from "./AuthContext";
 import type { BuildSlots } from "../utils/compatibilityChecker";
 
 type PriceRange = { min: number; max: number };
 
 interface BuilderContextType {
   selectedBuildId: number | null;
-  setSelectedBuildId: React.Dispatch<React.SetStateAction<number | null>>;
+  setSelectedBuildId: (buildId: number | null) => void;
 
   currentBuild: BuildSlots;
   setCurrentBuild: React.Dispatch<React.SetStateAction<BuildSlots>>;
@@ -33,7 +33,8 @@ const BuilderContext = createContext<BuilderContextType | undefined>(undefined);
 export const BuilderProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const { user: authUser, mode } = useAuth();
+  const { user: authUser } = useAuth();
+  const { mode } = useAuthMode();
   const [searchParams, setSearchParams] = useSearchParams();
   const hasInitializedFromURL = React.useRef(false);
 
@@ -97,11 +98,14 @@ export const BuilderProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     if (authUser?.budget) {
       const budget = authUser.budget;
-      // Only update if current settings would exceed budget
-      setPriceRange((prev) => ({
-        min: Math.min(prev.min, budget),
-        max: Math.min(prev.max, budget),
-      }));
+      // Update price range to respect new budget constraints
+      setPriceRange((prev) => {
+        // Clamp current range to not exceed the new budget
+        return {
+          min: Math.min(prev.min, budget), // Ensure min doesn't exceed budget
+          max: Math.min(prev.max, budget), // Clamp max to not exceed budget
+        };
+      });
     }
   }, [authUser?.budget]);
 
@@ -114,8 +118,9 @@ export const BuilderProvider: React.FC<{ children: React.ReactNode }> = ({
     
     if (hasInitializedFromURL.current) {
       const urlBuildId = getInitialBuildId();
-      // Only update if there's a meaningful difference
-      if (urlBuildId !== selectedBuildId) {
+      // Only update if there's a URL build parameter AND it's different from current selection
+      // Don't clear selection if there's no URL parameter
+      if (urlBuildId && urlBuildId !== selectedBuildId) {
         setSelectedBuildIdState(urlBuildId);
       }
     } else {
@@ -131,24 +136,29 @@ export const BuilderProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, [mode, clearBuildState]);
 
+  // Force context reset when switching between authenticated and guest modes
+  const contextKey = mode === 'guest' ? 'guest-mode' : `auth-mode-${authUser?.id || 'no-user'}`;
+
   return (
-    <BuilderContext.Provider
-      value={{
-        selectedBuildId,
-        setSelectedBuildId,
-        currentBuild,
-        setCurrentBuild,
-        priceRange,
-        setPriceRange,
-        buildName,
-        setBuildName,
-        isModifyingExisting,
-        setIsModifyingExisting,
-        clearBuildState,
-      }}
-    >
-      {children}
-    </BuilderContext.Provider>
+    <div key={contextKey}>
+      <BuilderContext.Provider
+        value={{
+          selectedBuildId,
+          setSelectedBuildId,
+          currentBuild,
+          setCurrentBuild,
+          priceRange,
+          setPriceRange,
+          buildName,
+          setBuildName,
+          isModifyingExisting,
+          setIsModifyingExisting,
+          clearBuildState,
+        }}
+      >
+        {children}
+      </BuilderContext.Provider>
+    </div>
   );
 };
 

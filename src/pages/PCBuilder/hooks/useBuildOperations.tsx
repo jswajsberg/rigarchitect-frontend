@@ -7,6 +7,7 @@ import { useCallback, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCart } from "../../../contexts/CartContext";
 import { useSelectedUserId } from "../../../contexts/UserContext";
+import { useAuth } from "../../../contexts/AuthContext";
 import {
   useCreateCartForUser,
   useUpdateCart,
@@ -34,6 +35,7 @@ export const useBuildOperations = ({
 }: UseBuildOperationsProps) => {
   const queryClient = useQueryClient();
   const selectedUserId = useSelectedUserId();
+  const { user: authUser } = useAuth();
   useCart();
 
   // Modal states for replacing browser popups
@@ -225,18 +227,22 @@ export const useBuildOperations = ({
       } else {
         setBuildName("Untitled Build");
       }
-      
+
+      // Restore price range to user's budget when loading existing build
+      const userBudget = authUser?.budget || 5000;
+      setPriceRange({ min: 0, max: userBudget });
+
       // Clear unsaved changes when loading a build
       if (setHasUnsavedChanges) {
         setHasUnsavedChanges(false);
       }
-      
+
       // Mark this as a load operation to prevent immediate unsaved changes flag
       if (lastOperationRef) {
         lastOperationRef.current = { type: 'load', timestamp: Date.now() };
       }
     },
-    [setSelectedBuildId, setIsModifyingExisting, setBuildName, setHasUnsavedChanges, lastOperationRef]
+    [setSelectedBuildId, setIsModifyingExisting, setBuildName, setPriceRange, setHasUnsavedChanges, lastOperationRef, authUser]
   );
 
   // Delete build
@@ -334,11 +340,15 @@ export const useBuildOperations = ({
         });
       }
 
-      // Clear local state
+      // Clear local state and restore price range to user's budget
       setCurrentBuild({});
       setBuildName("");
       setSelectedBuildId(null);
       setIsModifyingExisting(false);
+
+      // Reset price range to user's budget
+      const userBudget = authUser?.budget || 5000;
+      setPriceRange({ min: 0, max: userBudget });
 
       if (isSavedBuild) {
         setModalMessage({
@@ -369,6 +379,8 @@ export const useBuildOperations = ({
     setBuildName,
     setSelectedBuildId,
     setIsModifyingExisting,
+    setPriceRange,
+    authUser,
   ]);
 
   // Create new build with name confirmation

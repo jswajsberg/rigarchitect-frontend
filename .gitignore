@@ -67,3 +67,4 @@ github-copilot.*
 *.ai-cache
 *.ai-config
 nul
+commits-full.txt
