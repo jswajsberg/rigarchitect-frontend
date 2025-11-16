@@ -104,12 +104,21 @@ const PCBuilder: React.FC<PCBuilderProps> = React.memo(({ openAuthModal }) => {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showGuestSignupPrompt, setShowGuestSignupPrompt] = useState(false);
   const [justShared, setJustShared] = useState(false);
-  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
+  const [templateContainer, setTemplateContainer] = useState<HTMLDivElement | null>(null);
+  const scrollContainerRef = React.useCallback((node: HTMLDivElement | null) => {
+    setTemplateContainer(node);
+  }, []);
   const autoSaveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const templateTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const currentTemplateRef = React.useRef<string>("");
   const templateGenerationRef = React.useRef<number>(0);
   const lastOperationRef = React.useRef<{ type: 'save' | 'load', timestamp: number } | null>(null);
+
+  // Dragging state for template bar
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartX = React.useRef<number>(0);
+  const scrollLeftStart = React.useRef<number>(0);
+  const hasDragged = React.useRef<boolean>(false);
 
   // === Component data snapshot for consistent template application ===
   const componentSnapshotRef = React.useRef<ComponentResponse[] | null>(null);
@@ -412,30 +421,78 @@ const PCBuilder: React.FC<PCBuilderProps> = React.memo(({ openAuthModal }) => {
 
   // Template scrolling functions
   const checkScrollButtons = useCallback(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
+    if (!templateContainer) return;
 
-    setCanScrollLeft(container.scrollLeft > 0);
+    setCanScrollLeft(templateContainer.scrollLeft > 0);
     setCanScrollRight(
-      container.scrollLeft < container.scrollWidth - container.clientWidth - 1
+      templateContainer.scrollLeft < templateContainer.scrollWidth - templateContainer.clientWidth - 1
     );
-  }, []);
+  }, [templateContainer]);
 
   const scrollLeft = useCallback(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
+    if (!templateContainer) return;
 
-    container.scrollBy({ left: -300, behavior: "smooth" });
+    templateContainer.scrollBy({ left: -300, behavior: "smooth" });
     setTimeout(checkScrollButtons, 300);
-  }, [checkScrollButtons]);
+  }, [templateContainer, checkScrollButtons]);
 
   const scrollRight = useCallback(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
+    if (!templateContainer) return;
 
-    container.scrollBy({ left: 300, behavior: "smooth" });
+    templateContainer.scrollBy({ left: 300, behavior: "smooth" });
     setTimeout(checkScrollButtons, 300);
-  }, [checkScrollButtons]);
+  }, [templateContainer, checkScrollButtons]);
+
+  // Drag handlers for template bar
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!templateContainer) return;
+
+    setIsDragging(true);
+    hasDragged.current = false;
+    dragStartX.current = e.pageX - templateContainer.offsetLeft;
+    scrollLeftStart.current = templateContainer.scrollLeft;
+    templateContainer.style.cursor = 'grabbing';
+    templateContainer.style.userSelect = 'none';
+  }, [templateContainer]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDragging || !templateContainer) return;
+    e.preventDefault();
+
+    const x = e.pageX - templateContainer.offsetLeft;
+    const walk = (x - dragStartX.current) * 1.5; // Multiply for faster scrolling
+
+    // If user moved more than 5px, consider it a drag
+    if (Math.abs(walk) > 5) {
+      hasDragged.current = true;
+    }
+
+    templateContainer.scrollLeft = scrollLeftStart.current - walk;
+  }, [isDragging, templateContainer]);
+
+  const handleMouseUp = useCallback(() => {
+    if (templateContainer) {
+      templateContainer.style.cursor = 'grab';
+      templateContainer.style.userSelect = 'auto';
+    }
+    setIsDragging(false);
+
+    // Reset hasDragged after a short delay to allow click handlers to check it
+    setTimeout(() => {
+      hasDragged.current = false;
+    }, 50);
+  }, [templateContainer]);
+
+  const handleMouseLeave = useCallback(() => {
+    if (!isDragging) return;
+
+    if (templateContainer) {
+      templateContainer.style.cursor = 'grab';
+      templateContainer.style.userSelect = 'auto';
+    }
+    setIsDragging(false);
+    hasDragged.current = false;
+  }, [isDragging, templateContainer]);
 
   // Check scroll buttons on mount and when templates change
   useEffect(() => {
@@ -443,6 +500,30 @@ const PCBuilder: React.FC<PCBuilderProps> = React.memo(({ openAuthModal }) => {
     window.addEventListener("resize", checkScrollButtons);
     return () => window.removeEventListener("resize", checkScrollButtons);
   }, [checkScrollButtons]);
+
+  // Native wheel event listener with passive: false to properly prevent default
+  useEffect(() => {
+    if (!templateContainer) return;
+
+    const handleNativeWheel = (e: WheelEvent) => {
+      // Always prevent default and stop propagation when hovering over template bar
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Scroll horizontally based on vertical wheel movement
+      templateContainer.scrollLeft += e.deltaY;
+
+      // Update scroll buttons after scrolling
+      checkScrollButtons();
+    };
+
+    // Add listener with passive: false to allow preventDefault()
+    templateContainer.addEventListener('wheel', handleNativeWheel, { passive: false });
+
+    return () => {
+      templateContainer.removeEventListener('wheel', handleNativeWheel);
+    };
+  }, [templateContainer, checkScrollButtons]);
 
   // Sync selectedBuildId with URL parameter on mount and URL changes
   useEffect(() => {
@@ -1371,8 +1452,16 @@ const PCBuilder: React.FC<PCBuilderProps> = React.memo(({ openAuthModal }) => {
             <div
               ref={scrollContainerRef}
               className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1"
-              style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+              style={{
+                scrollbarWidth: "none",
+                msOverflowStyle: "none",
+                cursor: isDragging ? 'grabbing' : 'grab'
+              }}
               onScroll={checkScrollButtons}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseLeave}
             >
               {BUILD_TEMPLATES.map((template) => {
                 const isSelected = selectedTemplateId === template.id;
@@ -1414,6 +1503,10 @@ const PCBuilder: React.FC<PCBuilderProps> = React.memo(({ openAuthModal }) => {
                   <div
                     key={template.id}
                     onClick={() => {
+                      // Prevent clicking if user was dragging
+                      if (hasDragged.current) {
+                        return;
+                      }
                       // Prevent clicking if template is applying or within cooldown
                       if (!isApplyingTemplate && !templateTimeoutRef.current) {
                         handleApplyTemplate(template.id);
