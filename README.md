@@ -1,101 +1,123 @@
 # RigArchitect Frontend
 
-React + Vite frontend for creating and managing custom PC builds. Features user authentication, real-time API integration, and a responsive Tailwind CSS interface.
+A React + Vite frontend for building and managing custom PC configurations.
 
-## Features
+## What it does
 
-- **PC Building Interface**: Interactive PC builder with component compatibility checking
-- **Guest Mode**: Full guest user experience with persistent build storage using database-backed sessions
-- **Component Catalog**: Advanced component browsing with filters, search, and detailed specifications
-- **Modal-based Authentication**: Seamless login/signup modals with guest-to-user data migration
-- **Filter Persistence**: Component catalog filters persist across tab switching and page refreshes
-- **Professional UI**: Card-based layouts with overlay details to prevent layout distortion
-- Connects to the RigArchitect Spring Boot backend API
-- Axios and Orval-generated API clients for type-safe API calls
-- React Query for asynchronous data fetching and caching
-- Tailwind CSS for modern, responsive styling
-- Lucide React icons for consistent, lightweight SVG icons
-- Environment-based API URL configuration
-- React Query Devtools for debugging
+- Interactive PC builder with component compatibility checking
+- Guest mode for anonymous users with persistent build storage
+- Component catalog with search, filtering, and detailed specifications
+- Modal-based authentication with guest-to-user data migration
+- Filter persistence across tab switching and page refreshes
+- Professional card-based UI with overlay details
+- Shopping cart system for builds
+- Budget tracking
 
 ## Tech Stack
 
 - React 18+ with Vite
 - TypeScript
 - Tailwind CSS
-- Lucide React (icon library)
+- Lucide React (icons)
 - Axios
-- React Query (`@tanstack/react-query`, `@tanstack/react-query-devtools`)
-- Orval (for OpenAPI client generation)
-- Node.js 18+, npm 9+
+- React Query (`@tanstack/react-query`)
+- Orval (OpenAPI client generation)
 
-## Architecture
+## Prerequisites
 
-### Context-based State Management
-- **AuthContext**: Manages user authentication, guest sessions, and data migration
-- **ComponentCatalogContext**: Persistent filter state with localStorage integration
-- **NavigationContext**: Tab navigation with persistent active tab state
-- **CartContext**: Shopping cart management
-- **BuilderContext**: PC build state management
+- Node.js 18+
+- npm 9+
 
-### Guest User Experience
-- Guest sessions are stored in the database with UUID-based session IDs
-- Guest builds persist across browser sessions using backend storage
-- Seamless migration from guest to authenticated user with data preservation
-- 30-day session expiration with automatic cleanup
+---
 
-## Getting Started
+## Setup
 
 ### Installation
 
-1. Clone the repository:
+Clone the repository:
+```bash
+git clone <your-repo-url>
+cd rigarchitect-frontend
+```
 
+Install dependencies:
+```bash
+npm install
+```
+
+### Configuration
+
+Create a `.env` file in the project root:
+```env
+VITE_API_BASE_URL=http://localhost:8080
+```
+
+### API Client Generation (Optional)
+
+If you need to regenerate API clients from the OpenAPI spec:
+
+1. Configure `orval.config.js` with the location of your OpenAPI spec
+2. Run:
    ```bash
-   git clone <your-repo-url>
-   cd rigarchitect-frontend
+   npm run generate:api
    ```
 
-2. Install dependencies:
+Generated API files will appear in `src/api/`.
 
-   ```bash
-   npm install
-   ```
-
-### Running the Development Server
+### Running
 
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173) in your browser.
+The app starts at `http://localhost:5173`
 
-### API Client Generation (Optional)
+---
 
-If you are using Orval to generate API clients from your OpenAPI spec:
+## Architecture
 
-1. Configure `orval.config.js` with the location of your OpenAPI spec.
-2. Run:
+### Context-based State Management
 
-   ```bash
-   npm run generate:api
-   ```
+- `AuthContext` - User authentication, guest sessions, and data migration
+- `ComponentCatalogContext` - Persistent filter state with localStorage integration
+- `NavigationContext` - Tab navigation with persistent active tab state
+- `CartContext` - Shopping cart management
+- `BuilderContext` - PC build state management
 
-Generated API files will appear in `src/api/generated/`.
+### Guest User Experience
 
-### Environment Variables
+- Guest sessions are stored in the backend database with UUID-based session IDs
+- Guest builds persist across browser sessions using backend storage
+- Seamless migration from guest to authenticated user with data preservation
+- 30-day session expiration with automatic cleanup
 
-Create a `.env` file in the project root:
+## Development
+
+Run type checking:
+```bash
+npm run typecheck
+```
+
+Build for production:
+```bash
+npm run build
+```
+
+Preview production build:
+```bash
+npm run preview
+```
+
+---
+
+## Project Structure
 
 ```
-VITE_API_BASE_URL=http://localhost:8080
+src/
+├── api/           - Generated API clients and controllers
+├── components/    - Reusable React components
+├── context/       - React Context providers
+├── modals/        - Modal components
+├── pages/         - Page components
+└── main.tsx       - Application entry point
 ```
-
-Use it in code:
-
-```ts
-axios.defaults.baseURL = import.meta.env.VITE_API_BASE_URL;
-```
-
-### License
-
-[MIT](LICENSE)

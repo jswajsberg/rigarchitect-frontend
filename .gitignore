@@ -35,10 +35,10 @@ dist-ssr
 # --- AI / Assistant Tools ---
 
 # Claude Code
-.claude/
-.claude-code/
-.claude-code.json
-.cc-*
+# .claude/
+# .claude-code/
+# .claude-code.json
+# .cc-*
 
 # ChatGPT / Code Interpreter
 .chatgpt/
