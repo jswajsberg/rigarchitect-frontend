@@ -188,12 +188,6 @@ const ShoppingCart = React.memo(({ openAuthModal, setActiveTab }: ShoppingCartPr
       queryClient.invalidateQueries({
         queryKey: [`/api/v1/items/cart/${targetCart.id}`],
       });
-
-      setModalMessage({
-        title: "Component Added",
-        message: "Component added to cart!"
-      });
-      setShowSuccess(true);
     } catch (error: any) {
       console.error("Failed to add component:", error);
       setModalMessage({
@@ -249,12 +243,6 @@ const ShoppingCart = React.memo(({ openAuthModal, setActiveTab }: ShoppingCartPr
           queryKey: [`/api/v1/carts/user/${selectedUserId}`],
         });
       }
-
-      setModalMessage({
-        title: "Item Removed",
-        message: "Item removed from cart"
-      });
-      setShowSuccess(true);
     } catch (error: any) {
       console.error("Failed to remove item:", error);
       setModalMessage({
@@ -390,11 +378,6 @@ const ShoppingCart = React.memo(({ openAuthModal, setActiveTab }: ShoppingCartPr
                     <button
                       onClick={() => {
                         guestCart.clearCart();
-                        setModalMessage({
-                          title: "Success",
-                          message: "Cart cleared successfully!"
-                        });
-                        setShowSuccess(true);
                       }}
                       className="inline-flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm transition-colors"
                       title="Remove all items from cart"
@@ -453,11 +436,6 @@ const ShoppingCart = React.memo(({ openAuthModal, setActiveTab }: ShoppingCartPr
                           <button
                             onClick={() => {
                               guestCart.removeItem(item.id);
-                              setModalMessage({
-                                title: "Success",
-                                message: `${item.component.name} removed from cart!`
-                              });
-                              setShowSuccess(true);
                             }}
                             className="text-red-600 hover:text-red-800 mt-1"
                           >
