@@ -97,7 +97,16 @@ const ShoppingCart = React.memo(({ openAuthModal, setActiveTab }: ShoppingCartPr
     }
   );
 
-  const cartItems = cartItemsData?.data || [];
+  // Sort cart items by creation date descending (newest first) for consistent ordering
+  const cartItems = useMemo(() => {
+    const items = cartItemsData?.data || [];
+    return [...items].sort((a, b) => {
+      // Sort by createdAt descending (newest first)
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return dateB - dateA;
+    });
+  }, [cartItemsData]);
 
   // Component type icon configuration (consistent with other pages)
   const getComponentTypeIcon = (type?: string) => {
@@ -412,7 +421,7 @@ const ShoppingCart = React.memo(({ openAuthModal, setActiveTab }: ShoppingCartPr
                           <h4 className="font-medium text-gray-900">{item.component.name}</h4>
                           <p className="text-sm text-gray-600">{item.component.brand}</p>
                           <p className="text-sm font-medium text-green-600">
-                            ${item.component.price.toFixed(2)} each
+                            ${(item.component.price ?? 0).toFixed(2)} each
                           </p>
                         </div>
                         
@@ -439,7 +448,7 @@ const ShoppingCart = React.memo(({ openAuthModal, setActiveTab }: ShoppingCartPr
 
                         <div className="text-right">
                           <p className="font-medium text-gray-900">
-                            ${(item.component.price * item.quantity).toFixed(2)}
+                            ${((item.component.price ?? 0) * item.quantity).toFixed(2)}
                           </p>
                           <button
                             onClick={() => {

@@ -109,20 +109,26 @@ class GuestCartService {
 
     this.cart.totalItems = this.cart.items.reduce((total, item) => total + item.quantity, 0);
     this.cart.totalPrice = this.cart.items.reduce((total, item) => {
-      return total + (item.component.price * item.quantity);
+      return total + ((item.component.price ?? 0) * item.quantity);
     }, 0);
     this.cart.updatedAt = new Date();
   }
 
   /**
-   * Get current cart
-   * @returns Current guest cart state
+   * Get current cart with items sorted by addedAt descending (newest first)
+   * @returns Current guest cart state with sorted items
    */
   getCart(): GuestCart {
     if (!this.cart) {
       this.initializeCart();
     }
-    return this.cart!;
+    // Return cart with items sorted by addedAt descending (newest first)
+    return {
+      ...this.cart!,
+      items: [...this.cart!.items].sort((a, b) =>
+        b.addedAt.getTime() - a.addedAt.getTime()
+      )
+    };
   }
 
   /**
@@ -238,11 +244,14 @@ class GuestCartService {
   }
 
   /**
-   * Get cart items
-   * @returns Array of all cart items
+   * Get cart items sorted by addedAt descending (newest first)
+   * @returns Array of all cart items sorted by date
    */
   getItems(): GuestCartItem[] {
-    return this.cart?.items || [];
+    if (!this.cart) return [];
+    return [...this.cart.items].sort((a, b) =>
+      b.addedAt.getTime() - a.addedAt.getTime()
+    );
   }
 
   /**
@@ -332,14 +341,12 @@ export const guestCartService = GuestCartService.getInstance();
 // Export utility hooks
 export const useGuestCart = () => {
   const [cart, setCart] = React.useState(() => guestCartService.getCart());
-  const [updateCounter, setUpdateCounter] = React.useState(0);
 
   // Subscribe to cart changes
   React.useEffect(() => {
     const unsubscribe = guestCartService.subscribe(() => {
       const newCart = guestCartService.getCart();
       setCart(newCart);
-      setUpdateCounter(prev => prev + 1);
     });
     return unsubscribe;
   }, []);
@@ -348,7 +355,6 @@ export const useGuestCart = () => {
   const forceUpdate = React.useCallback(() => {
     const newCart = guestCartService.getCart();
     setCart(newCart);
-    setUpdateCounter(prev => prev + 1);
   }, []);
 
   const getCart = () => cart;
