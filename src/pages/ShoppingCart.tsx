@@ -4,7 +4,7 @@
  */
 import React, { useState, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useSelectedUserId } from "../contexts/UserContext";
+import { useSelectedUserId, useSelectedUser } from "../contexts/UserContext";
 import { useAuthMode } from "../contexts/AuthContext";
 import { useGuestCart } from "../services/GuestCartService";
 import {
@@ -53,10 +53,17 @@ interface ShoppingCartProps {
   setActiveTab?: (tab: string) => void;
 }
 
+// Tax rates for Quebec, Canada
+const TAX_RATES = {
+  GST: 0.05, // 5% Federal GST
+  QST: 0.09975, // 9.975% Quebec provincial tax
+};
+
 const ShoppingCart = React.memo(({ openAuthModal, setActiveTab }: ShoppingCartProps) => {
   const queryClient = useQueryClient();
   const { isGuest } = useAuthMode();
   const selectedUserId = useSelectedUserId();
+  const selectedUser = useSelectedUser();
   const guestCart = useGuestCart();
   const [addComponentId, setAddComponentId] = useState("");
   const [addQuantity, setAddQuantity] = useState(1);
@@ -791,13 +798,53 @@ const ShoppingCart = React.memo(({ openAuthModal, setActiveTab }: ShoppingCartPr
                     ${(shoppingCart?.totalPrice || 0).toFixed(2)}
                   </span>
                 </div>
-                <hr className="border-gray-200" />
-                <div className="flex justify-between font-semibold">
-                  <span>Total:</span>
-                  <span className="text-green-600">
-                    ${(shoppingCart?.totalPrice || 0).toFixed(2)}
+                <div className="flex justify-between text-xs text-gray-500">
+                  <span>GST (5%):</span>
+                  <span>
+                    ${((shoppingCart?.totalPrice || 0) * TAX_RATES.GST).toFixed(2)}
                   </span>
                 </div>
+                <div className="flex justify-between text-xs text-gray-500">
+                  <span>QST (9.975%):</span>
+                  <span>
+                    ${((shoppingCart?.totalPrice || 0) * TAX_RATES.QST).toFixed(2)}
+                  </span>
+                </div>
+                <hr className="border-gray-200" />
+                <div className="flex justify-between font-semibold">
+                  <span>Total (incl. tax):</span>
+                  <span className="text-green-600">
+                    ${((shoppingCart?.totalPrice || 0) * (1 + TAX_RATES.GST + TAX_RATES.QST)).toFixed(2)}
+                  </span>
+                </div>
+                {selectedUser && (
+                  <>
+                    <hr className="border-gray-200" />
+                    <div className="bg-gray-50 rounded p-3 space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Your Budget:</span>
+                        <span className="font-medium">
+                          ${(selectedUser.budget || 0).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">After Purchase:</span>
+                        <span
+                          className={
+                            (selectedUser.budget || 0) >= (shoppingCart?.totalPrice || 0) * (1 + TAX_RATES.GST + TAX_RATES.QST)
+                              ? "text-green-600 font-medium"
+                              : "text-red-600 font-semibold"
+                          }
+                        >
+                          ${(
+                            (selectedUser.budget || 0) -
+                            (shoppingCart?.totalPrice || 0) * (1 + TAX_RATES.GST + TAX_RATES.QST)
+                          ).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             ) : (
               <div className="text-center py-4 text-gray-500 mb-6">
@@ -806,52 +853,41 @@ const ShoppingCart = React.memo(({ openAuthModal, setActiveTab }: ShoppingCartPr
               </div>
             )}
 
+            {selectedUser && (selectedUser.budget || 0) < (shoppingCart?.totalPrice || 0) * (1 + TAX_RATES.GST + TAX_RATES.QST) && cartItems.length > 0 && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 text-red-800">
+                  <AlertTriangle size={18} />
+                  <span className="text-sm font-medium">
+                    Insufficient Budget
+                  </span>
+                </div>
+                <p className="text-xs text-red-600 mt-1">
+                  Your cart total exceeds your available budget. Please remove items or update your budget to proceed.
+                </p>
+              </div>
+            )}
+
             <button
               onClick={handleCheckout}
-              disabled={cartItems.length === 0}
+              disabled={
+                cartItems.length === 0 ||
+                (selectedUser && (selectedUser.budget || 0) < (shoppingCart?.totalPrice || 0) * (1 + TAX_RATES.GST + TAX_RATES.QST))
+              }
               className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium transition-colors"
             >
               <CreditCard size={18} />
-              {cartItems.length === 0 ? "Cart is Empty" : "Proceed to Checkout"}
+              {cartItems.length === 0
+                ? "Cart is Empty"
+                : (selectedUser && (selectedUser.budget || 0) < (shoppingCart?.totalPrice || 0) * (1 + TAX_RATES.GST + TAX_RATES.QST))
+                ? "Insufficient Budget"
+                : "Proceed to Checkout"}
             </button>
 
-            {cartItems.length > 0 && (
+            {cartItems.length > 0 && !(selectedUser && (selectedUser.budget || 0) < (shoppingCart?.totalPrice || 0) * (1 + TAX_RATES.GST + TAX_RATES.QST)) && (
               <div className="text-xs text-gray-500 mt-2 text-center">
-                Tax will be calculated at checkout
+                Tax included in total above
               </div>
             )}
-          </div>
-
-          {/* Enhanced Help Text */}
-          <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-            <div className="flex items-center gap-2 mb-3">
-              <Lightbulb size={18} className="text-blue-600" />
-              <h4 className="text-sm font-medium text-blue-900">
-                Shopping Cart Tips
-              </h4>
-            </div>
-            <ul className="text-xs text-blue-700 space-y-1.5">
-              <li className="flex items-start gap-2">
-                <span className="text-blue-500 mt-0.5">•</span>
-                Add components from your saved builds
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-500 mt-0.5">•</span>
-                Add individual components using Quick Add
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-500 mt-0.5">•</span>
-                Mix and match from different sources
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-500 mt-0.5">•</span>
-                Items stay in cart until checkout or removed
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-500 mt-0.5">•</span>
-                Use "Clear All" to quickly empty your cart
-              </li>
-            </ul>
           </div>
         </div>
       </div>

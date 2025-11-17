@@ -122,7 +122,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         saveAuthState(updatedUserData); // Persist updated budget to localStorage
       }
     }
-  }, [allUsersData, user]);
+    // Only depend on allUsersData to avoid infinite loops
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allUsersData?.data]);
 
   const initializeAuth = async () => {
     try {

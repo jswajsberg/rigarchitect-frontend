@@ -55,10 +55,14 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
 
   const updateBudgetMutation = useUpdateUserBudget({
     mutation: {
-      onSuccess: () => {
+      onSuccess: async (response) => {
         setIsEditingBudget(false);
-        // The AuthContext will automatically sync the updated budget
-        queryClient.invalidateQueries({
+
+        // Immediately invalidate and refetch user queries to sync budget
+        await queryClient.invalidateQueries({
+          queryKey: ["/api/v1/users"],
+        });
+        await queryClient.refetchQueries({
           queryKey: ["/api/v1/users"],
         });
       },
@@ -194,6 +198,11 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
                       type="number"
                       value={budgetInput}
                       onChange={(e) => setBudgetInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !updateBudgetMutation.isPending) {
+                          handleBudgetSave();
+                        }
+                      }}
                       min="0"
                       max="9999"
                       className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"

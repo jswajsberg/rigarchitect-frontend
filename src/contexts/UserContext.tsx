@@ -73,13 +73,13 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
     },
   });
 
-  // Set initial selected user based on authenticated user or current user
+  // Set initial selected user and keep it synced with auth user changes (including budget updates)
   useEffect(() => {
     if (isAuthenticated) {
-      if (authUser && !selectedUser) {
-        // Use authenticated user as selected user
+      if (authUser) {
+        // Always sync with authenticated user to get latest budget updates
         setSelectedUser(authUser);
-      } else if (currentUserData?.data && !selectedUser && !authUser) {
+      } else if (currentUserData?.data && !authUser) {
         // Fallback to current user endpoint
         setSelectedUser(currentUserData.data);
       }
@@ -87,7 +87,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
       // Clear selected user when not authenticated
       setSelectedUser(null);
     }
-  }, [authUser, currentUserData, selectedUser, isAuthenticated]);
+  }, [authUser, currentUserData, isAuthenticated]);
 
   // Extract users array from response
   const allUsers = allUsersData?.data || [];

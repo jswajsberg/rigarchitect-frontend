@@ -352,7 +352,7 @@ const ComponentCard = ({
                   className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                 >
                   <ShoppingCart size={16} />
-                  <span className="text-sm font-medium">Buy Now</span>
+                  <span className="text-sm font-medium">Add to Cart</span>
                 </button>
               )}
             </div>
@@ -500,7 +500,7 @@ const ComponentCard = ({
                         className="flex-1 flex items-center justify-center gap-2 px-5 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-200 font-medium shadow-md hover:shadow-lg"
                       >
                         <ShoppingCart size={18} />
-                        <span>Buy Now</span>
+                        <span>Add to Cart</span>
                       </button>
                     )}
                   </div>

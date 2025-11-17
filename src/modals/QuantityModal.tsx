@@ -48,7 +48,7 @@ const QuantityModal: React.FC<QuantityModalProps> = ({
     >
       <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-2xl">
         <h3 className="text-lg font-semibold mb-4">
-          {actionType === "build" ? "Add to Build Cart" : "Buy Now"}
+          {actionType === "build" ? "Add to Build Cart" : "Add to Cart"}
         </h3>
 
         <div className="mb-4">
@@ -119,9 +119,9 @@ const QuantityModal: React.FC<QuantityModalProps> = ({
                 : "bg-green-600 hover:bg-green-700"
             }`}
           >
-            {isOutOfStock 
-              ? "Out of Stock" 
-              : actionType === "build" ? "Add to Cart" : "Buy Now"}
+            {isOutOfStock
+              ? "Out of Stock"
+              : "Add to Cart"}
           </button>
         </div>
       </div>
