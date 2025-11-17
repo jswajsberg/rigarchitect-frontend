@@ -115,14 +115,20 @@ class GuestCartService {
   }
 
   /**
-   * Get current cart
-   * @returns Current guest cart state
+   * Get current cart with items sorted by addedAt descending (newest first)
+   * @returns Current guest cart state with sorted items
    */
   getCart(): GuestCart {
     if (!this.cart) {
       this.initializeCart();
     }
-    return this.cart!;
+    // Return cart with items sorted by addedAt descending (newest first)
+    return {
+      ...this.cart!,
+      items: [...this.cart!.items].sort((a, b) =>
+        b.addedAt.getTime() - a.addedAt.getTime()
+      )
+    };
   }
 
   /**
@@ -238,11 +244,14 @@ class GuestCartService {
   }
 
   /**
-   * Get cart items
-   * @returns Array of all cart items
+   * Get cart items sorted by addedAt descending (newest first)
+   * @returns Array of all cart items sorted by date
    */
   getItems(): GuestCartItem[] {
-    return this.cart?.items || [];
+    if (!this.cart) return [];
+    return [...this.cart.items].sort((a, b) =>
+      b.addedAt.getTime() - a.addedAt.getTime()
+    );
   }
 
   /**

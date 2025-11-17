@@ -97,7 +97,16 @@ const ShoppingCart = React.memo(({ openAuthModal, setActiveTab }: ShoppingCartPr
     }
   );
 
-  const cartItems = cartItemsData?.data || [];
+  // Sort cart items by creation date descending (newest first) for consistent ordering
+  const cartItems = useMemo(() => {
+    const items = cartItemsData?.data || [];
+    return [...items].sort((a, b) => {
+      // Sort by createdAt descending (newest first)
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return dateB - dateA;
+    });
+  }, [cartItemsData]);
 
   // Component type icon configuration (consistent with other pages)
   const getComponentTypeIcon = (type?: string) => {
